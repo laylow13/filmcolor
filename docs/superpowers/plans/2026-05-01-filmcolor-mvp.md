@@ -1,4 +1,4 @@
-# Filmcolor MVP Implementation Plan
+﻿# Filmcolor MVP Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -6,7 +6,7 @@
 
 **Architecture:** Use a Python `src/` monorepo with a standalone `filmcolor_core` package and a FastAPI `filmcolor_server` package. Use a Vite React TypeScript frontend in `web/` that talks to the local API and renders a roll-oriented light-table workbench.
 
-**Tech Stack:** Python 3.12, pytest, numpy, pillow, tifffile, rawpy adapter boundary, pydantic, FastAPI, uvicorn, React, TypeScript, Vite, Vitest.
+**Tech Stack:** Python 3.12+ managed by uv, pytest, numpy, pillow, tifffile, rawpy adapter boundary, pydantic, FastAPI, uvicorn, React, TypeScript, Vite, Vitest.
 
 ---
 
@@ -30,6 +30,7 @@ Create or modify these files:
 ```text
 D:/filmcolor/
   pyproject.toml
+  uv.lock
   README.md
   src/
     filmcolor_core/
@@ -106,7 +107,7 @@ def test_core_package_imports():
 Run:
 
 ```powershell
-python -m pytest tests/core/test_pipeline.py::test_core_package_imports -v
+uv run pytest tests/core/test_pipeline.py::test_core_package_imports -v
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'filmcolor_core'`.
@@ -184,13 +185,13 @@ Filmcolor is a local color negative processing workbench. It keeps original capt
 Install Python dependencies:
 
 ```powershell
-python -m pip install -e ".[dev]"
+uv sync --extra dev
 ```
 
 Run tests:
 
 ```powershell
-python -m pytest
+uv run pytest
 ```
 ```
 
@@ -199,7 +200,7 @@ python -m pytest
 Run:
 
 ```powershell
-python -m pip install -e ".[dev]"
+uv sync --extra dev
 ```
 
 Expected: command completes and reports `Successfully installed filmcolor-0.1.0` or equivalent editable install output.
@@ -209,7 +210,7 @@ Expected: command completes and reports `Successfully installed filmcolor-0.1.0`
 Run:
 
 ```powershell
-python -m pytest tests/core/test_pipeline.py::test_core_package_imports -v
+uv run pytest tests/core/test_pipeline.py::test_core_package_imports -v
 ```
 
 Expected: PASS.
@@ -217,7 +218,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add pyproject.toml README.md src/filmcolor_core/__init__.py src/filmcolor_server/__init__.py tests/core/test_pipeline.py
+git add pyproject.toml uv.lock README.md src/filmcolor_core/__init__.py src/filmcolor_server/__init__.py tests/core/test_pipeline.py
 git commit -m "chore: scaffold python packages"
 ```
 
@@ -281,7 +282,7 @@ def test_frame_sidecar_separates_auto_and_user_values(tmp_path: Path):
 Run:
 
 ```powershell
-python -m pytest tests/core/test_sidecar.py -v
+uv run pytest tests/core/test_sidecar.py -v
 ```
 
 Expected: FAIL with `ModuleNotFoundError` or import errors for `filmcolor_core.models`.
@@ -480,7 +481,7 @@ def write_frame_sidecar(path: Path, sidecar: FrameSidecar) -> None:
 Run:
 
 ```powershell
-python -m pytest tests/core/test_sidecar.py -v
+uv run pytest tests/core/test_sidecar.py -v
 ```
 
 Expected: PASS.
@@ -584,7 +585,7 @@ def test_render_pipeline_array_returns_uint8_preview():
 Run:
 
 ```powershell
-python -m pytest tests/core/test_pipeline.py -v
+uv run pytest tests/core/test_pipeline.py -v
 ```
 
 Expected: FAIL with import errors for `filmcolor_core.pipeline`.
@@ -710,7 +711,7 @@ def _neutralizing_gain(rgb: np.ndarray) -> np.ndarray:
 Run:
 
 ```powershell
-python -m pytest tests/core/test_pipeline.py -v
+uv run pytest tests/core/test_pipeline.py -v
 ```
 
 Expected: PASS.
@@ -772,7 +773,7 @@ def test_render_preview_file_writes_webp(tmp_path: Path):
 Run:
 
 ```powershell
-python -m pytest tests/core/test_pipeline.py::test_decode_to_linear_rgb_reads_common_image_fixture tests/core/test_pipeline.py::test_render_preview_file_writes_webp -v
+uv run pytest tests/core/test_pipeline.py::test_decode_to_linear_rgb_reads_common_image_fixture tests/core/test_pipeline.py::test_render_preview_file_writes_webp -v
 ```
 
 Expected: FAIL with import errors for `filmcolor_core.raw`.
@@ -820,7 +821,7 @@ def _decode_rawpy(path: Path) -> DecodedImage:
         import rawpy
     except ImportError as exc:
         raise RuntimeError(
-            "RAW decoding requires the optional raw extra: python -m pip install -e \".[raw]\""
+            "RAW decoding requires the optional raw extra: uv sync --extra raw"
         ) from exc
 
     with rawpy.imread(str(path)) as raw:
@@ -868,7 +869,7 @@ def render_preview_file(
 Run:
 
 ```powershell
-python -m pytest tests/core -v
+uv run pytest tests/core -v
 ```
 
 Expected: PASS.
@@ -942,7 +943,7 @@ def test_update_frame_pipeline_marks_manual_adjustment(tmp_path: Path):
 Run:
 
 ```powershell
-python -m pytest tests/server/test_storage.py -v
+uv run pytest tests/server/test_storage.py -v
 ```
 
 Expected: FAIL with import errors for `filmcolor_server.storage`.
@@ -1103,7 +1104,7 @@ def _deep_merge(target: dict[str, Any], patch: dict[str, Any]) -> None:
 Run:
 
 ```powershell
-python -m pytest tests/server/test_storage.py -v
+uv run pytest tests/server/test_storage.py -v
 ```
 
 Expected: PASS.
@@ -1179,7 +1180,7 @@ def test_patch_pipeline_and_render_preview(tmp_path: Path):
 Run:
 
 ```powershell
-python -m pytest tests/server/test_api.py -v
+uv run pytest tests/server/test_api.py -v
 ```
 
 Expected: FAIL with import errors for `filmcolor_server.app`.
@@ -1345,7 +1346,7 @@ app = create_app()
 Run:
 
 ```powershell
-python -m pytest tests/server -v
+uv run pytest tests/server -v
 ```
 
 Expected: PASS.
@@ -2113,7 +2114,7 @@ Filmcolor is a local color negative processing workbench. It keeps original capt
 Install Python dependencies:
 
 ```powershell
-python -m pip install -e ".[dev]"
+uv sync --extra dev
 ```
 
 Install frontend dependencies:
@@ -2129,7 +2130,7 @@ Set-Location ..
 Python:
 
 ```powershell
-python -m pytest
+uv run pytest
 ```
 
 Frontend:
@@ -2146,7 +2147,7 @@ Set-Location ..
 Start the API:
 
 ```powershell
-python -m uvicorn filmcolor_server.app:app --reload --host 127.0.0.1 --port 8000
+uv run uvicorn filmcolor_server.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Start the web app:
@@ -2173,7 +2174,7 @@ Open the Vite URL shown in the terminal. The frontend proxies `/api` requests to
 Run:
 
 ```powershell
-python -m pytest
+uv run pytest
 Set-Location web
 npm test
 npm run build
@@ -2201,7 +2202,7 @@ git commit -m "docs: add mvp developer workflow"
 Run:
 
 ```powershell
-python -m uvicorn filmcolor_server.app:app --reload --host 127.0.0.1 --port 8000
+uv run uvicorn filmcolor_server.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Expected: server logs include `Uvicorn running on http://127.0.0.1:8000`.
@@ -2287,3 +2288,4 @@ Deferred from this MVP and still aligned with the spec:
 - Full-resolution TIFF/JPEG export queue is not implemented in this first vertical slice; preview rendering and style persistence come first.
 - Interactive film-base/gray/white click sampling is represented in the sidecar model and pipeline, but browser click placement is left for the next plan.
 - True RAW decoding is supported through the `rawpy` adapter boundary, but fixture tests use deterministic PNG/JPEG input to keep CI and local setup lightweight.
+
