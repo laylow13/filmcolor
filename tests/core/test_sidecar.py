@@ -9,14 +9,14 @@ from filmcolor_core.sidecar import (
 )
 
 
-def test_roll_metadata_round_trips(tmp_path: Path):
+def test_roll_metadata_round_trips(workspace_tmp_path: Path):
     roll = RollMetadata.create(
         roll_id="2026-05-01-roll-001",
         name="E100 Studio Test",
         source_dir=Path("D:/film/raw/E100-test"),
     )
 
-    path = tmp_path / "roll.json"
+    path = workspace_tmp_path / "roll.json"
     write_roll_metadata(path, roll)
     loaded = read_roll_metadata(path)
 
@@ -25,7 +25,7 @@ def test_roll_metadata_round_trips(tmp_path: Path):
     assert loaded.source_dir == "D:/film/raw/E100-test"
 
 
-def test_frame_sidecar_separates_auto_and_user_values(tmp_path: Path):
+def test_frame_sidecar_separates_auto_and_user_values(workspace_tmp_path: Path):
     sidecar = FrameSidecar.create(
         frame_id="IMG_0001",
         source_path=Path("D:/film/raw/E100-test/IMG_0001.CR3"),
@@ -35,7 +35,7 @@ def test_frame_sidecar_separates_auto_and_user_values(tmp_path: Path):
     sidecar.pipeline.mask.auto.confidence = 0.82
     sidecar.pipeline.mask.samples.film_base = [[120, 840], [134, 842]]
 
-    path = tmp_path / "IMG_0001.xmp.json"
+    path = workspace_tmp_path / "IMG_0001.xmp.json"
     write_frame_sidecar(path, sidecar)
     loaded = read_frame_sidecar(path)
 

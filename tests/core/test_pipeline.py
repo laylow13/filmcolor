@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import numpy as np
+from PIL import Image
 
 from filmcolor_core import __version__
 from filmcolor_core.models import OutputStyle, PipelineSettings
@@ -74,3 +77,30 @@ def test_render_pipeline_array_returns_uint8_preview():
     assert rendered.dtype == np.uint8
     assert rendered.shape == (4, 4, 3)
     assert diagnostics["mask_confidence"] == 0.55
+
+
+def test_decode_to_linear_rgb_reads_common_image_fixture(workspace_tmp_path: Path):
+    from filmcolor_core.raw import decode_to_linear_rgb
+
+    source = workspace_tmp_path / "capture.png"
+    Image.new("RGB", (4, 2), color=(64, 128, 192)).save(source)
+
+    decoded = decode_to_linear_rgb(source)
+
+    assert decoded.data.shape == (2, 4, 3)
+    assert decoded.data.dtype == np.float32
+    assert decoded.metadata["decoder"] == "pillow"
+
+
+def test_render_preview_file_writes_webp(workspace_tmp_path: Path):
+    from filmcolor_core.render import render_preview_file
+
+    source = workspace_tmp_path / "capture.png"
+    output = workspace_tmp_path / "preview.webp"
+    Image.new("RGB", (8, 8), color=(64, 128, 192)).save(source)
+
+    diagnostics = render_preview_file(source, output, PipelineSettings(), max_size=4)
+
+    assert output.exists()
+    assert diagnostics["mask_confidence"] == 0.55
+    assert Image.open(output).size == (4, 4)
