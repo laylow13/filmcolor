@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the first runnable local MVP for reversal-film RAW inversion, sidecar persistence, preview rendering, and a modern web workbench.
+**Goal:** Build the first runnable local MVP for color negative RAW conversion, sidecar persistence, preview rendering, and a modern web workbench.
 
 **Architecture:** Use a Python `src/` monorepo with a standalone `filmcolor_core` package and a FastAPI `filmcolor_server` package. Use a Vite React TypeScript frontend in `web/` that talks to the local API and renders a roll-oriented light-table workbench.
 
@@ -69,7 +69,7 @@ D:/filmcolor/
 Responsibilities:
 
 - `filmcolor_core.models`: shared pydantic models for roll, frame, pipeline, samples, jobs, and exports.
-- `filmcolor_core.pipeline`: deterministic numeric operations for inversion, color-cast estimation, balancing, and tone styles.
+- `filmcolor_core.pipeline`: deterministic numeric operations for negative inversion, orange-mask estimation, balancing, and tone styles.
 - `filmcolor_core.raw`: input decoding adapter with image-file fallback and optional RAW support.
 - `filmcolor_core.render`: preview and export rendering helpers.
 - `filmcolor_core.sidecar`: JSON serialization helpers for roll and frame sidecars.
@@ -123,7 +123,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "filmcolor"
 version = "0.1.0"
-description = "Local reversal-film inversion and color-cast correction workbench"
+description = "Local color negative inversion and orange-mask correction workbench"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115",
@@ -177,7 +177,7 @@ Create `README.md`:
 ```markdown
 # Filmcolor
 
-Filmcolor is a local reversal-film processing workbench. It keeps original captures unchanged, stores processing decisions in JSON sidecars, and renders previews or exports from reproducible pipeline parameters.
+Filmcolor is a local color negative processing workbench. It keeps original captures unchanged, stores processing decisions in JSON sidecars, and renders previews or exports from reproducible pipeline parameters.
 
 ## Development
 
@@ -325,7 +325,7 @@ class JobStatus(StrEnum):
 
 
 class RollDefaults(BaseModel):
-    film_profile: str = "generic_reversal"
+    film_profile: str = "generic_color_negative"
     output_style: OutputStyle = OutputStyle.FAITHFUL
     color_space: str = "sRGB"
 
@@ -719,7 +719,7 @@ Expected: PASS.
 
 ```powershell
 git add src/filmcolor_core/pipeline.py tests/core/test_pipeline.py
-git commit -m "feat: add core inversion pipeline"
+git commit -m "feat: add color negative inversion pipeline"
 ```
 
 ---
@@ -2106,7 +2106,7 @@ Replace `README.md` with:
 ```markdown
 # Filmcolor
 
-Filmcolor is a local reversal-film processing workbench. It keeps original captures unchanged, stores processing decisions in JSON sidecars, and renders previews or exports from reproducible pipeline parameters.
+Filmcolor is a local color negative processing workbench. It keeps original captures unchanged, stores processing decisions in JSON sidecars, and renders previews or exports from reproducible pipeline parameters.
 
 ## Development Setup
 

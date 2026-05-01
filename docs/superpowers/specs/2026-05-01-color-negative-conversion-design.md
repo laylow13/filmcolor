@@ -1,10 +1,10 @@
-# Film Reversal Color Cast Removal Design
+# Color Negative Film Conversion Design
 
 Date: 2026-05-01
 
 ## Goal
 
-Build a local film-processing platform for freshly developed reversal-film captures made with a digital camera. The first version treats camera RAW files as the primary input, performs inversion and color-cast removal, supports whole-roll batch processing, and provides a modern web workbench for review, correction, synchronization, and export.
+Build a local film-processing platform for freshly developed color negative film captures made with a digital camera. The first version treats camera RAW files as the primary input, performs negative-to-positive inversion, removes the orange film-base mask, supports whole-roll batch processing, and provides a modern web workbench for review, correction, synchronization, and export.
 
 The project should produce repeatable results rather than destructive edits. All automatic estimates, user corrections, output styles, and export settings are stored in sidecar files so every result can be regenerated.
 
@@ -12,7 +12,7 @@ The project should produce repeatable results rather than destructive edits. All
 
 The first release includes:
 
-- A Python algorithm library for RAW decoding, linear inversion, color-cast estimation, tone mapping, and export preparation.
+- A Python algorithm library for RAW decoding, density-aware negative inversion, orange-mask estimation, tone mapping, and export preparation.
 - A FastAPI local backend for roll/session management, background jobs, preview caching, sidecar persistence, and batch export.
 - A web frontend for importing a roll, browsing thumbnails, previewing individual frames, sampling film base/gray/white points, editing parameters, syncing settings, and exporting TIFF/JPEG files.
 - Three output styles: faithful, neutral, and share.
@@ -33,7 +33,7 @@ The interface should feel like a modern digital darkroom, not a retro-themed web
 
 The main UI uses a Modern Darkroom language: minimal, spacious, precise, and centered on the image. The palette is warm white, light gray, and near black, with restrained amber film-base accents and small lab-red highlights.
 
-The preview and roll areas borrow from a light table: thumbnail grids can resemble contact sheets or film strips, selected frames can show subtle slide-mount boundaries and frame numbers, and the large preview area can use a clean light-table background.
+The preview and roll areas borrow from a light table: thumbnail grids can resemble contact sheets or film strips, selected frames can show subtle frame boundaries and frame numbers, and the large preview area can use a clean light-table background.
 
 Retro Lab details are limited to identity and status elements: `ROLL` and `FRAME` labels, lab-note-like export records, and small processing-status marks. Avoid large film perforation decorations, heavy vintage typography, dark brown/red darkroom themes, nested dashboard cards, decorative gradients, and marketing-page styling.
 
@@ -43,7 +43,7 @@ The project is split into four layers.
 
 ### Algorithm Library: `filmcolor-core`
 
-`filmcolor-core` is a standalone Python package. It owns RAW decoding, linearization, inversion, film-base/color-cast estimation, point sampling, channel balancing, tone mapping, output color conversion, preview rendering, and full-resolution render preparation.
+`filmcolor-core` is a standalone Python package. It owns RAW decoding, linearization, negative inversion, film-base/orange-mask estimation, point sampling, channel balancing, tone mapping, output color conversion, preview rendering, and full-resolution render preparation.
 
 It should not depend on the web frontend. It accepts image paths and pipeline parameters, then returns rendered image data, derived measurements, diagnostics, and metadata. This lets the core be tested independently and reused later by a CLI, desktop app, or plugin.
 
@@ -90,21 +90,21 @@ The pipeline is designed to be explainable, replayable, and adjustable.
 
 The core reads camera RAW files and produces linear RGB data while preserving dynamic range. It records camera model, lens when available, capture time, black level, white level, white balance source, color matrix data, and RAW decoding settings.
 
-The first implementation should avoid applying camera picture styles or destructive tone curves before inversion and color correction.
+The first implementation should avoid applying camera picture styles or destructive tone curves before negative inversion and mask correction.
 
 ### 2. Capture Normalization
 
 The pipeline includes hooks for camera-copying corrections: black/white normalization, exposure compensation, and optional vignetting/flat-field correction. First-version flat-field correction can be manual or disabled by default, but the pipeline should leave a clear interface for it.
 
-### 3. Linear Inversion
+### 3. Negative Inversion
 
-Inversion should happen in a linear or density-aware representation rather than by subtracting gamma-encoded values. Black and white references must be handled around inversion so exposure range does not distort color-cast estimation.
+Inversion should happen in a linear or density-aware representation rather than by subtracting gamma-encoded values. For color negative film, this step converts the orange-masked negative capture into a positive image while preserving density relationships. Black and white references must be handled around inversion so exposure range does not distort orange-mask estimation.
 
-### 4. Film Base and Color-Cast Estimation
+### 4. Film Base and Orange-Mask Estimation
 
-The default path estimates channel bias and color cast automatically from the image. If film borders, unexposed film-base regions, or user-selected film-base samples are available, they take priority.
+The default path estimates channel bias and the color negative orange mask automatically from the image. If film borders, unexposed film-base regions, or user-selected film-base samples are available, they take priority.
 
-The frontend allows users to place film-base, gray, and white samples. The algorithm library converts these samples into explicit constraints. Automatic estimates include confidence values so the UI can flag frames that need user attention.
+The frontend allows users to place film-base, gray, and white samples. The algorithm library converts these samples into explicit constraints. Film-base samples are especially important for color negative stock because the orange mask varies by stock, exposure, and capture setup. Automatic estimates include confidence values so the UI can flag frames that need user attention.
 
 ### 5. Color Balance and Neutralization
 
@@ -116,7 +116,7 @@ Automatic values and user overrides must be stored separately so users can retur
 
 The platform provides three output styles:
 
-- `faithful`: approximates a light-table or projection-like reversal-film look while preserving film character.
+- `faithful`: preserves a natural color-negative film character after conversion without forcing a modern digital look.
 - `neutral`: produces a lower-contrast, more neutral output that keeps room for later editing.
 - `share`: applies stronger automatic contrast, brightness, and saturation for immediate sharing.
 
@@ -176,7 +176,7 @@ Sidecars are JSON for the first version because JSON is readable, diffable, easy
   "source_dir": "D:/film/raw/E100-test",
   "created_at": "2026-05-01T20:30:00+08:00",
   "defaults": {
-    "film_profile": "generic_reversal",
+    "film_profile": "generic_color_negative",
     "output_style": "faithful",
     "color_space": "Display P3"
   }
@@ -300,7 +300,7 @@ Preview cache keys include input file hash, algorithm version, and pipeline para
 ### Algorithm Tests
 
 - Verify RAW decode and metadata extraction with small fixtures.
-- Verify linear inversion, black/white handling, channel gain, and tone mapping.
+- Verify negative inversion, black/white handling, channel gain, orange-mask compensation, and tone mapping.
 - Verify that the same input plus sidecar gives reproducible output.
 - Verify confidence behavior for color-cast estimation.
 
@@ -323,7 +323,7 @@ Preview cache keys include input file hash, algorithm version, and pipeline para
 
 ### M1: Core Algorithm Loop
 
-RAW input to linear data, inversion, basic automatic color-cast correction, and preview/TIFF/JPEG output. This milestone can be verified through tests or a minimal CLI.
+RAW input to linear data, negative inversion, basic automatic orange-mask correction, and preview/TIFF/JPEG output. This milestone can be verified through tests or a minimal CLI.
 
 ### M2: Roll and Sidecar Management
 
