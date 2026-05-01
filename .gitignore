@@ -1,4 +1,7 @@
 .worktrees/
 .venv/
 .pytest_cache/
+.tmp/
+__pycache__/
+*.egg-info/
 pytest-cache-files-*/
