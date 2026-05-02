@@ -63,9 +63,18 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
 
     @app.get("/api/engines")
     def get_engines():
+        try:
+            negpy = get_negpy_status()
+        except Exception as exc:
+            negpy = {
+                "available": False,
+                "experimental": True,
+                "backend": "cpu",
+                "reason": str(exc),
+            }
         return {
             "filmcolor": {"available": True},
-            "negpy": get_negpy_status(),
+            "negpy": negpy,
         }
 
     @app.get("/api/rolls/{roll_id}/frames/{frame_id}")
@@ -109,10 +118,7 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
             frame = workspace.get_frame(roll_id, frame_id)
             if frame.pipeline.engine == "negpy":
                 frame.engines.negpy.diagnostics["error"] = str(exc)
-                write_frame_sidecar(
-                    workspace.root / "rolls" / roll_id / "frames" / f"{frame_id}.xmp.json",
-                    frame,
-                )
+                write_frame_sidecar(workspace._frame_path(roll_id, frame_id), frame)
             jobs.set_failed(job.id, str(exc))
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

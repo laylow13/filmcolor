@@ -97,3 +97,18 @@ def test_negpy_preview_failure_persists_diagnostics(workspace_tmp_path: Path, mo
     assert response.status_code == 500
     frame = client.get(f"/api/rolls/{roll['id']}/frames/IMG_0001").json()
     assert frame["engines"]["negpy"]["diagnostics"]["error"] == "negpy exploded"
+
+
+def test_engines_endpoint_returns_unavailable_when_status_check_crashes(workspace_tmp_path: Path, monkeypatch):
+    def boom():
+        raise RuntimeError("status check exploded")
+
+    monkeypatch.setattr("filmcolor_server.app.get_negpy_status", boom)
+    client = TestClient(create_app(workspace_root=workspace_tmp_path / "workspace"))
+
+    response = client.get("/api/engines")
+
+    assert response.status_code == 200
+    assert response.json()["filmcolor"]["available"] is True
+    assert response.json()["negpy"]["available"] is False
+    assert "status check exploded" in response.json()["negpy"]["reason"]
