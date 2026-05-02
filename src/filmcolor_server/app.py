@@ -103,10 +103,7 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
             )
             if frame.pipeline.engine == "filmcolor":
                 frame.pipeline.mask.auto.confidence = diagnostics.get("mask_confidence", 0.0)
-            write_frame_sidecar(
-                workspace.root / "rolls" / roll_id / "frames" / f"{frame_id}.xmp.json",
-                frame,
-            )
+            write_frame_sidecar(workspace._frame_path(roll_id, frame_id), frame)
             jobs.set_succeeded(job.id, message=f"Rendered {frame_id}")
             return {
                 "job_id": job.id,
