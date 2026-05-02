@@ -1,4 +1,16 @@
 export type OutputStyle = "faithful" | "neutral" | "share";
+export type ProcessingEngine = "filmcolor" | "negpy";
+
+export interface EngineStatus {
+  filmcolor: { available: true };
+  negpy: {
+    available: boolean;
+    experimental: true;
+    backend: "cpu";
+    commit?: string;
+    reason?: string;
+  };
+}
 
 export interface RollMetadata {
   id: string;
@@ -23,6 +35,7 @@ export interface FrameSidecar {
     captured_at: string | null;
   };
   pipeline: {
+    engine: ProcessingEngine;
     tone: {
       style: OutputStyle;
       exposure: number;
@@ -40,6 +53,24 @@ export interface FrameSidecar {
         gray: number[][];
         white: number[][];
       };
+    };
+  };
+  engines: {
+    negpy: {
+      enabled: boolean;
+      version: string | null;
+      source_commit: string | null;
+      backend: string;
+      params: {
+        mode: string;
+        preset: string;
+        density?: number | null;
+        grade?: number | null;
+        wb_cyan?: number | null;
+        wb_magenta?: number | null;
+        wb_yellow?: number | null;
+      };
+      diagnostics: Record<string, unknown>;
     };
   };
   exports: unknown[];

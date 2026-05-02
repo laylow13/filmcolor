@@ -1,7 +1,7 @@
 import { Aperture, Grid2X2, ImageIcon, Play, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { listFrames, listRolls, renderPreview, setFrameStyle } from "./api";
-import type { FrameSidecar, OutputStyle, RollMetadata } from "./types";
+import { getEngines, listFrames, listRolls, renderPreview, setFrameEngine, setFrameStyle } from "./api";
+import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata } from "./types";
 
 const styles: OutputStyle[] = ["faithful", "neutral", "share"];
 
@@ -11,9 +11,13 @@ export function App() {
   const [frames, setFrames] = useState<FrameSidecar[]>([]);
   const [selectedFrameId, setSelectedFrameId] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [engines, setEngines] = useState<EngineStatus | null>(null);
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
+    getEngines()
+      .then(setEngines)
+      .catch((err: Error) => setError(err.message));
     listRolls()
       .then((items) => {
         setRolls(items);
@@ -39,6 +43,15 @@ export function App() {
     () => frames.find((frame) => frame.frame_id === selectedFrameId) ?? null,
     [frames, selectedFrameId]
   );
+
+  async function chooseEngine(engine: ProcessingEngine) {
+    if (!selectedRollId || !selectedFrame) return;
+    const updated = await setFrameEngine(selectedRollId, selectedFrame.frame_id, engine);
+    setFrames((current) =>
+      current.map((frame) => (frame.frame_id === updated.frame_id ? updated : frame))
+    );
+    setPreviewUrl("");
+  }
 
   async function chooseStyle(style: OutputStyle) {
     if (!selectedRollId || !selectedFrame) return;
@@ -126,6 +139,27 @@ export function App() {
           <SlidersHorizontal size={18} />
           <span>Pipeline</span>
         </div>
+        <div className="sectionLabel">ENGINE</div>
+        <div className="segmented engineSegment">
+          <button
+            className={(selectedFrame?.pipeline.engine ?? "filmcolor") === "filmcolor" ? "selected" : ""}
+            onClick={() => chooseEngine("filmcolor")}
+          >
+            Filmcolor
+          </button>
+          <button
+            className={selectedFrame?.pipeline.engine === "negpy" ? "selected" : ""}
+            disabled={!engines?.negpy.available}
+            onClick={() => chooseEngine("negpy")}
+          >
+            NegPy Experimental
+          </button>
+        </div>
+        {engines?.negpy.available ? (
+          <p className="engineNote">NegPy Experimental · CPU backend · {engines.negpy.commit ?? "unknown commit"}</p>
+        ) : (
+          <p className="engineNote">{engines?.negpy.reason ?? "Checking NegPy availability..."}</p>
+        )}
         <div className="sectionLabel">STYLE</div>
         <div className="segmented">
           {styles.map((style) => (

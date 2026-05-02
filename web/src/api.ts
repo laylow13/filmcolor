@@ -1,4 +1,9 @@
-import type { FrameSidecar, OutputStyle, RollMetadata } from "./types";
+import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata } from "./types";
+
+export async function getEngines(): Promise<EngineStatus> {
+  const response = await fetch("/api/engines");
+  return readJson(response);
+}
 
 export async function listRolls(): Promise<RollMetadata[]> {
   const response = await fetch("/api/rolls");
@@ -7,6 +12,23 @@ export async function listRolls(): Promise<RollMetadata[]> {
 
 export async function listFrames(rollId: string): Promise<FrameSidecar[]> {
   const response = await fetch(`/api/rolls/${rollId}/frames`);
+  return readJson(response);
+}
+
+export async function setFrameEngine(
+  rollId: string,
+  frameId: string,
+  engine: ProcessingEngine
+): Promise<FrameSidecar> {
+  const body =
+    engine === "negpy"
+      ? { engine, engines: { negpy: { enabled: true } } }
+      : { engine, engines: { negpy: { enabled: false } } };
+  const response = await fetch(`/api/rolls/${rollId}/frames/${frameId}/pipeline`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
   return readJson(response);
 }
 
