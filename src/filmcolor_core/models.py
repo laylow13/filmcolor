@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 
 class OutputStyle(StrEnum):
@@ -117,7 +117,7 @@ class NegPyEngineSettings(BaseModel):
     source_commit: str | None = None
     backend: str = "cpu"
     params: NegPyParams = Field(default_factory=NegPyParams)
-    diagnostics: dict[str, object] = Field(default_factory=dict)
+    diagnostics: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class EngineSettings(BaseModel):

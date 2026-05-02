@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from filmcolor_core.models import FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata
@@ -82,3 +83,80 @@ def test_frame_sidecar_round_trips_negpy_engine_settings(workspace_tmp_path: Pat
     assert loaded.engines.negpy.source_commit == "abc123"
     assert loaded.engines.negpy.params.preset == "default"
     assert loaded.engines.negpy.diagnostics["adapter"] == "in_process"
+
+
+def test_frame_sidecar_round_trips_nested_json_diagnostics(workspace_tmp_path: Path):
+    sidecar = FrameSidecar.create(
+        frame_id="IMG_0005",
+        source_path=Path("D:/film/raw/E100-test/IMG_0005.CR3"),
+        sha256="jkl012",
+    )
+    sidecar.engines.negpy.diagnostics = {
+        "adapter": "in_process",
+        "metrics": {"confidence": 0.7},
+        "warnings": ["cpu"],
+    }
+
+    path = workspace_tmp_path / "IMG_0005.xmp.json"
+    write_frame_sidecar(path, sidecar)
+    loaded = read_frame_sidecar(path)
+
+    assert loaded.engines.negpy.diagnostics == {
+        "adapter": "in_process",
+        "metrics": {"confidence": 0.7},
+        "warnings": ["cpu"],
+    }
+
+
+def test_frame_sidecar_reads_old_style_without_engine_fields(workspace_tmp_path: Path):
+    path = workspace_tmp_path / "IMG_0006.xmp.json"
+    path.write_text(
+        json.dumps(
+            {
+                "frame_id": "IMG_0006",
+                "status": "unprocessed",
+                "source": {
+                    "path": "D:/film/raw/E100-test/IMG_0006.CR3",
+                    "sha256": "mno345",
+                },
+                "pipeline": {
+                    "version": "0.1.0",
+                    "raw": {
+                        "white_balance": "camera",
+                        "black_level_mode": "metadata",
+                    },
+                    "inversion": {
+                        "enabled": True,
+                        "method": "linear_density",
+                    },
+                    "mask": {
+                        "auto": {
+                            "rgb_gain": [1.0, 1.0, 1.0],
+                            "confidence": 0.0,
+                        },
+                        "samples": {
+                            "film_base": [],
+                            "gray": [],
+                            "white": [],
+                        },
+                    },
+                    "tone": {
+                        "style": "faithful",
+                        "exposure": 0.0,
+                        "contrast": 0.12,
+                        "black_point": 0.004,
+                        "white_point": 0.985,
+                    },
+                },
+                "exports": [],
+                "error": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = read_frame_sidecar(path)
+
+    assert loaded.pipeline.engine == ProcessingEngine.FILMCOLOR
+    assert loaded.engines.negpy.enabled is False
+    assert loaded.engines.negpy.params.mode == "C41"
