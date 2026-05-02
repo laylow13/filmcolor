@@ -43,26 +43,35 @@ def test_render_negpy_preview_uses_injected_runner(workspace_tmp_path: Path, mon
 
 
 def test_get_negpy_status_is_thread_safe(monkeypatch):
-    from filmcolor_core.negpy_adapter import _import_negpy_modules, _negpy_root
+    # Always mock the import target so the lock is exercised
+    # regardless of whether NegPy is installed.
+    import types
 
-    root = _negpy_root()
-    if not root.exists():
-        monkeypatch.setattr("filmcolor_core.negpy_adapter._negpy_root", lambda: Path("Z:/missing/NegPy"))
+    def fake_import(root):
+        ws = types.ModuleType("negpy.domain.models")
+        ws.WorkspaceConfig = dict
+        ip = types.ModuleType("negpy.services.rendering.image_processor")
+        ip.ImageProcessor = dict
+        return {"WorkspaceConfig": dict, "ImageProcessor": dict}
 
-    results = []
-    errors = []
+    monkeypatch.setattr(
+        "filmcolor_core.negpy_adapter._import_negpy_modules", fake_import
+    )
 
-    def call():
+    results = [None] * 8
+    errors = [None] * 8
+
+    def call(i):
         try:
-            results.append(get_negpy_status())
+            results[i] = get_negpy_status()
         except Exception as exc:
-            errors.append(exc)
+            errors[i] = exc
 
-    threads = [threading.Thread(target=call) for _ in range(8)]
+    threads = [threading.Thread(target=call, args=(i,)) for i in range(8)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
 
-    assert len(errors) == 0
-    assert len(results) == 8
+    assert all(e is None for e in errors)
+    assert all(r is not None for r in results)
