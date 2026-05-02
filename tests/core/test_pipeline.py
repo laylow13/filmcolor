@@ -92,6 +92,33 @@ def test_decode_to_linear_rgb_reads_common_image_fixture(workspace_tmp_path: Pat
     assert decoded.metadata["decoder"] == "pillow"
 
 
+def test_render_preview_file_dispatches_to_negpy(workspace_tmp_path: Path, monkeypatch):
+    from filmcolor_core.models import ProcessingEngine
+    from filmcolor_core.render import render_preview_file
+
+    source = workspace_tmp_path / "capture.png"
+    output = workspace_tmp_path / "preview.webp"
+    Image.new("RGB", (8, 8), color=(64, 128, 192)).save(source)
+
+    settings = PipelineSettings()
+    settings.engine = ProcessingEngine.NEGPY
+
+    def fake_negpy(source_path, output_path, pipeline_settings, max_size):
+        assert source_path == source
+        assert output_path == output
+        assert pipeline_settings is settings
+        assert max_size == 5
+        Image.new("RGB", (5, 5), color=(128, 128, 128)).save(output_path)
+        return {"adapter": "fake-negpy"}
+
+    monkeypatch.setattr("filmcolor_core.render.render_negpy_preview", fake_negpy)
+
+    diagnostics = render_preview_file(source, output, settings, max_size=5)
+
+    assert diagnostics["adapter"] == "fake-negpy"
+    assert Image.open(output).size == (5, 5)
+
+
 def test_render_preview_file_writes_webp(workspace_tmp_path: Path):
     from filmcolor_core.render import render_preview_file
 
