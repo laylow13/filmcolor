@@ -329,3 +329,10 @@ button {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 13px;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingBar,
+  .previewLoading span {
+    animation: none;
+  }
+}

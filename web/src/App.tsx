@@ -16,15 +16,19 @@ export function App() {
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
+    let ignore = false;
     getEngines()
-      .then(setEngines)
-      .catch((err: Error) => setError(err.message));
+      .then((result) => { if (!ignore) setEngines(result); })
+      .catch((err: unknown) => { if (!ignore) setError(err instanceof Error ? err.message : "Failed to load engines"); });
     listRolls()
       .then((items) => {
-        setRolls(items);
-        setSelectedRollId(items[0]?.id ?? "");
+        if (!ignore) {
+          setRolls(items);
+          setSelectedRollId(items[0]?.id ?? "");
+        }
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: unknown) => { if (!ignore) setError(err instanceof Error ? err.message : "Failed to load rolls"); });
+    return () => { ignore = true; };
   }, []);
 
   useEffect(() => {
@@ -32,12 +36,16 @@ export function App() {
       setFrames([]);
       return;
     }
+    let ignore = false;
     listFrames(selectedRollId)
       .then((items) => {
-        setFrames(items);
-        setSelectedFrameId(items[0]?.frame_id ?? "");
+        if (!ignore) {
+          setFrames(items);
+          setSelectedFrameId(items[0]?.frame_id ?? "");
+        }
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: unknown) => { if (!ignore) setError(err instanceof Error ? err.message : "Failed to load frames"); });
+    return () => { ignore = true; };
   }, [selectedRollId]);
 
   const selectedFrame = useMemo(
@@ -47,19 +55,27 @@ export function App() {
 
   async function chooseEngine(engine: ProcessingEngine) {
     if (!selectedRollId || !selectedFrame) return;
-    const updated = await setFrameEngine(selectedRollId, selectedFrame.frame_id, engine);
-    setFrames((current) =>
-      current.map((frame) => (frame.frame_id === updated.frame_id ? updated : frame))
-    );
-    setPreviewUrl("");
+    try {
+      const updated = await setFrameEngine(selectedRollId, selectedFrame.frame_id, engine);
+      setFrames((current) =>
+        current.map((frame) => (frame.frame_id === updated.frame_id ? updated : frame))
+      );
+      setPreviewUrl("");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to switch engine");
+    }
   }
 
   async function chooseStyle(style: OutputStyle) {
     if (!selectedRollId || !selectedFrame) return;
-    const updated = await setFrameStyle(selectedRollId, selectedFrame.frame_id, style);
-    setFrames((current) =>
-      current.map((frame) => (frame.frame_id === updated.frame_id ? updated : frame))
-    );
+    try {
+      const updated = await setFrameStyle(selectedRollId, selectedFrame.frame_id, style);
+      setFrames((current) =>
+        current.map((frame) => (frame.frame_id === updated.frame_id ? updated : frame))
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update style");
+    }
   }
 
   async function handleRenderPreview() {
