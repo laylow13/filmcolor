@@ -40,7 +40,7 @@ def get_negpy_status() -> dict[str, Any]:
         "available": True,
         "experimental": True,
         "backend": "cpu",
-        "source_commit": _negpy_commit(),
+        "commit": _negpy_commit(),
     }
 
 
