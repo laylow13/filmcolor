@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,8 @@ import numpy as np
 from PIL import Image
 
 from filmcolor_core.models import PipelineSettings
+
+_negpy_import_lock = threading.Lock()
 
 
 class NegPyUnavailable(RuntimeError):
@@ -108,19 +111,20 @@ def _run_negpy_cpu(source_path: Path, max_size: int) -> tuple[np.ndarray, dict[s
 
 def _import_negpy_modules(root: Path) -> dict[str, Any]:
     root_str = str(root)
-    added_path = root_str not in sys.path
-    if added_path:
-        sys.path.insert(0, root_str)
-
-    try:
-        from negpy.domain.models import WorkspaceConfig
-        from negpy.services.rendering.image_processor import ImageProcessor
-    finally:
+    with _negpy_import_lock:
+        added_path = root_str not in sys.path
         if added_path:
-            try:
-                sys.path.remove(root_str)
-            except ValueError:
-                pass
+            sys.path.insert(0, root_str)
+
+        try:
+            from negpy.domain.models import WorkspaceConfig
+            from negpy.services.rendering.image_processor import ImageProcessor
+        finally:
+            if added_path:
+                try:
+                    sys.path.remove(root_str)
+                except ValueError:
+                    pass
 
     return {
         "WorkspaceConfig": WorkspaceConfig,
@@ -150,7 +154,7 @@ def _negpy_commit() -> str | None:
 
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            ["git", "-C", str(root), "rev-parse", "--short=7", "HEAD"],
             check=True,
             capture_output=True,
             text=True,

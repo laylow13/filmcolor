@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -39,3 +40,29 @@ def test_render_negpy_preview_uses_injected_runner(workspace_tmp_path: Path, mon
     assert diagnostics["backend"] == "cpu"
     assert diagnostics["source_commit"] == "abc123"
     assert diagnostics["fake"] is True
+
+
+def test_get_negpy_status_is_thread_safe(monkeypatch):
+    from filmcolor_core.negpy_adapter import _import_negpy_modules, _negpy_root
+
+    root = _negpy_root()
+    if not root.exists():
+        monkeypatch.setattr("filmcolor_core.negpy_adapter._negpy_root", lambda: Path("Z:/missing/NegPy"))
+
+    results = []
+    errors = []
+
+    def call():
+        try:
+            results.append(get_negpy_status())
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=call) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(errors) == 0
+    assert len(results) == 8
