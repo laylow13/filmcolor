@@ -27,6 +27,20 @@ dev = [
 raw = [
   "rawpy>=0.21"
 ]
+negpy = [
+  "rawpy==0.25.1",
+  "tifffile==2026.4.11",
+  "imagecodecs==2026.3.6",
+  "imageio==2.37.3",
+  "jinja2==3.1.6",
+  "llvmlite==0.44.0",
+  "numba==0.61.2",
+  "opencv-python-headless==4.13.0.92",
+  "pyqt6==6.11.0",
+  "pyqt6-charts==6.11.0",
+  "qtawesome==1.4.2",
+  "wgpu==0.31.0"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

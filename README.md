@@ -10,6 +10,24 @@ Install Python dependencies with uv:
 uv sync --extra dev
 ```
 
+## Optional NegPy Experimental Engine
+
+Filmcolor can use [NegPy](https://github.com/marcinz606/NegPy) as an optional experimental preview engine for color negative conversion. NegPy is GPL-3.0; enabling this engine uses GPL-3.0 code from the NegPy project.
+
+Initialize the submodule:
+
+```powershell
+git submodule update --init --recursive
+```
+
+Install the optional dependencies:
+
+```powershell
+uv sync --extra dev --extra negpy
+```
+
+The default Filmcolor engine does not require NegPy. If the submodule or optional dependencies are missing, `NegPy Experimental` is shown as unavailable and the Filmcolor engine continues to work.
+
 Install frontend dependencies:
 
 ```powershell
