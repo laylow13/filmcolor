@@ -234,3 +234,98 @@ button {
     border-bottom: 1px solid #ded8cc;
   }
 }
+
+/* U1: top loading bar */
+.loadingBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #c26b2b, #e09d4a, #c26b2b);
+  background-size: 200% 100%;
+  animation: loadingSlide 1.2s ease-in-out infinite;
+  z-index: 100;
+  transition: width 0.3s ease;
+}
+
+@keyframes loadingSlide {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* U2: dismissible error banner */
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-top: 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #a12424;
+  font-size: 13px;
+}
+
+.errorBanner button {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  background: #fff;
+  color: #a12424;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* U3: preview loading pulse */
+.previewLoading {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  color: #8a8278;
+}
+
+.previewLoading span {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* U5: engine segment uses 2 columns */
+.engineSegment {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+
+/* NegPy info readout for U4 */
+.negpyInfo {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 20px;
+  border: 1px solid #ded8cc;
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.negpyInfo dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.negpyInfo dt {
+  color: #706a60;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.negpyInfo dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+}

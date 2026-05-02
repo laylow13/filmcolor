@@ -11,6 +11,7 @@ export function App() {
   const [frames, setFrames] = useState<FrameSidecar[]>([]);
   const [selectedFrameId, setSelectedFrameId] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [isRendering, setIsRendering] = useState(false);
   const [engines, setEngines] = useState<EngineStatus | null>(null);
   const [error, setError] = useState<string>("");
 
@@ -63,12 +64,22 @@ export function App() {
 
   async function handleRenderPreview() {
     if (!selectedRollId || !selectedFrame) return;
-    const result = await renderPreview(selectedRollId, selectedFrame.frame_id);
-    setPreviewUrl(`${result.preview_url}?t=${Date.now()}`);
+    setIsRendering(true);
+    try {
+      const result = await renderPreview(selectedRollId, selectedFrame.frame_id);
+      setPreviewUrl(`${result.preview_url}?t=${Date.now()}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Render failed");
+    } finally {
+      setIsRendering(false);
+    }
   }
 
   return (
     <main className="shell">
+      {engines === null && rolls.length === 0 && !error ? (
+        <div className="loadingBar" style={{ width: "100%" }} />
+      ) : null}
       <aside className="rolls" aria-label="Roll list">
         <div className="brand">
           <Aperture aria-hidden="true" size={22} />
@@ -103,7 +114,12 @@ export function App() {
         </header>
 
         <div className="preview">
-          {previewUrl ? (
+          {isRendering ? (
+            <div className="previewLoading">
+              <ImageIcon size={34} />
+              <span>Rendering...</span>
+            </div>
+          ) : previewUrl ? (
             <img src={previewUrl} alt="Rendered film preview" />
           ) : (
             <div className="previewEmpty">
@@ -158,7 +174,7 @@ export function App() {
         {engines?.negpy.available ? (
           <p className="engineNote">NegPy Experimental · CPU backend · {engines.negpy.commit ?? "unknown commit"}</p>
         ) : (
-          <p className="engineNote">{engines?.negpy.reason ?? "Checking NegPy availability..."}</p>
+          <p className="engineNote">NegPy Experimental · CPU backend · {engines?.negpy.reason ?? "Checking NegPy availability..."}</p>
         )}
         <div className="sectionLabel">STYLE</div>
         <div className="segmented">
@@ -172,21 +188,47 @@ export function App() {
             </button>
           ))}
         </div>
-        <dl className="readout">
-          <div>
-            <dt>Mask confidence</dt>
-            <dd>{selectedFrame?.pipeline.mask.auto.confidence.toFixed(2) ?? "0.00"}</dd>
+        {selectedFrame?.pipeline.engine === "negpy" ? (
+          <div className="negpyInfo">
+            <dl>
+              <div>
+                <dt>Backend</dt>
+                <dd>{selectedFrame.engines.negpy.backend}</dd>
+              </div>
+              <div>
+                <dt>Commit</dt>
+                <dd>{selectedFrame.engines.negpy.source_commit?.slice(0, 7) ?? "unknown"}</dd>
+              </div>
+              <div>
+                <dt>Adapter</dt>
+                <dd>{String(selectedFrame.engines.negpy.diagnostics?.adapter ?? "in_process")}</dd>
+              </div>
+            </dl>
           </div>
-          <div>
-            <dt>Exposure</dt>
-            <dd>{selectedFrame?.pipeline.tone.exposure.toFixed(2) ?? "0.00"}</dd>
+        ) : (
+          <dl className="readout">
+            <div>
+              <dt>Mask confidence</dt>
+              <dd>{selectedFrame?.pipeline.mask.auto.confidence.toFixed(2) ?? "0.00"}</dd>
+            </div>
+            <div>
+              <dt>Exposure</dt>
+              <dd>{selectedFrame?.pipeline.tone.exposure.toFixed(2) ?? "0.00"}</dd>
+            </div>
+            <div>
+              <dt>Contrast</dt>
+              <dd>{selectedFrame?.pipeline.tone.contrast.toFixed(2) ?? "0.00"}</dd>
+            </div>
+          </dl>
+        )}
+        {error ? (
+          <div className="errorBanner">
+            <span>{error}</span>
+            <button onClick={() => setError("")} aria-label="Dismiss error">
+              Dismiss
+            </button>
           </div>
-          <div>
-            <dt>Contrast</dt>
-            <dd>{selectedFrame?.pipeline.tone.contrast.toFixed(2) ?? "0.00"}</dd>
-          </div>
-        </dl>
-        {error ? <p className="error">{error}</p> : null}
+        ) : null}
       </aside>
     </main>
   );
