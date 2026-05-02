@@ -13,6 +13,11 @@ class OutputStyle(StrEnum):
     SHARE = "share"
 
 
+class ProcessingEngine(StrEnum):
+    FILMCOLOR = "filmcolor"
+    NEGPY = "negpy"
+
+
 class FrameStatus(StrEnum):
     UNPROCESSED = "unprocessed"
     PROCESSING = "processing"
@@ -96,8 +101,32 @@ class ToneSettings(BaseModel):
     white_point: float = 0.985
 
 
+class NegPyParams(BaseModel):
+    mode: str = "C41"
+    preset: str = "default"
+    density: float | None = None
+    grade: float | None = None
+    wb_cyan: float | None = None
+    wb_magenta: float | None = None
+    wb_yellow: float | None = None
+
+
+class NegPyEngineSettings(BaseModel):
+    enabled: bool = False
+    version: str | None = None
+    source_commit: str | None = None
+    backend: str = "cpu"
+    params: NegPyParams = Field(default_factory=NegPyParams)
+    diagnostics: dict[str, object] = Field(default_factory=dict)
+
+
+class EngineSettings(BaseModel):
+    negpy: NegPyEngineSettings = Field(default_factory=NegPyEngineSettings)
+
+
 class PipelineSettings(BaseModel):
     version: str = "0.1.0"
+    engine: ProcessingEngine = ProcessingEngine.FILMCOLOR
     raw: RawSettings = Field(default_factory=RawSettings)
     inversion: InversionSettings = Field(default_factory=InversionSettings)
     mask: MaskSettings = Field(default_factory=MaskSettings)
@@ -116,6 +145,7 @@ class FrameSidecar(BaseModel):
     status: FrameStatus = FrameStatus.UNPROCESSED
     source: SourceMetadata
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
+    engines: EngineSettings = Field(default_factory=EngineSettings)
     exports: list[ExportRecord] = Field(default_factory=list)
     error: str | None = None
 
