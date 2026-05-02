@@ -4,7 +4,13 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from filmcolor_core.models import FrameSidecar, FrameStatus, PipelineSettings, RollMetadata
+from filmcolor_core.models import (
+    EngineSettings,
+    FrameSidecar,
+    FrameStatus,
+    PipelineSettings,
+    RollMetadata,
+)
 from filmcolor_core.sidecar import (
     read_frame_sidecar,
     read_roll_metadata,
@@ -92,6 +98,20 @@ class Workspace:
         data = sidecar.pipeline.model_dump(mode="json")
         _deep_merge(data, patch)
         sidecar.pipeline = PipelineSettings.model_validate(data)
+        sidecar.status = FrameStatus.MANUALLY_ADJUSTED
+        write_frame_sidecar(self._frame_path(roll_id, frame_id), sidecar)
+        return sidecar
+
+    def update_frame_engines(
+        self,
+        roll_id: str,
+        frame_id: str,
+        patch: dict[str, Any],
+    ) -> FrameSidecar:
+        sidecar = self.get_frame(roll_id, frame_id)
+        data = sidecar.engines.model_dump(mode="json")
+        _deep_merge(data, patch)
+        sidecar.engines = EngineSettings.model_validate(data)
         sidecar.status = FrameStatus.MANUALLY_ADJUSTED
         write_frame_sidecar(self._frame_path(roll_id, frame_id), sidecar)
         return sidecar

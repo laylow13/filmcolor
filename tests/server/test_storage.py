@@ -40,3 +40,42 @@ def test_update_frame_pipeline_marks_manual_adjustment(workspace_tmp_path: Path)
     assert updated.status == FrameStatus.MANUALLY_ADJUSTED
     assert updated.pipeline.tone.style == "share"
     assert updated.pipeline.tone.exposure == 0.5
+
+
+def test_update_frame_pipeline_can_switch_engine(workspace_tmp_path: Path):
+    source = workspace_tmp_path / "source"
+    source.mkdir()
+    Image.new("RGB", (4, 4), color=(10, 20, 30)).save(source / "IMG_0001.png")
+
+    workspace = Workspace(workspace_tmp_path / "workspace")
+    roll = workspace.import_roll(source, name="NegPy Test")
+    frame = workspace.list_frames(roll.id)[0]
+
+    updated = workspace.update_frame_pipeline(
+        roll.id,
+        frame.frame_id,
+        {"engine": "negpy"},
+    )
+
+    assert updated.pipeline.engine == "negpy"
+    assert updated.status == FrameStatus.MANUALLY_ADJUSTED
+
+
+def test_update_frame_engines_can_patch_negpy_settings(workspace_tmp_path: Path):
+    source = workspace_tmp_path / "source"
+    source.mkdir()
+    Image.new("RGB", (4, 4), color=(10, 20, 30)).save(source / "IMG_0001.png")
+
+    workspace = Workspace(workspace_tmp_path / "workspace")
+    roll = workspace.import_roll(source, name="NegPy Test")
+    frame = workspace.list_frames(roll.id)[0]
+
+    updated = workspace.update_frame_engines(
+        roll.id,
+        frame.frame_id,
+        {"negpy": {"enabled": True, "source_commit": "abc123", "params": {"preset": "default"}}},
+    )
+
+    assert updated.engines.negpy.enabled is True
+    assert updated.engines.negpy.source_commit == "abc123"
+    assert updated.engines.negpy.params.preset == "default"
