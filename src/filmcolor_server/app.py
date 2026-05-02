@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from filmcolor_core.negpy_adapter import get_negpy_status
 from filmcolor_core.render import render_preview_file
 from filmcolor_core.sidecar import write_frame_sidecar
 from filmcolor_server.jobs import JobRegistry
@@ -19,13 +20,17 @@ class ImportRollRequest(BaseModel):
 
 
 class PipelinePatchRequest(BaseModel):
+    engine: str | None = None
     tone: dict[str, Any] | None = None
     mask: dict[str, Any] | None = None
     inversion: dict[str, Any] | None = None
     raw: dict[str, Any] | None = None
+    engines: dict[str, Any] | None = None
 
-    def patch_data(self) -> dict[str, Any]:
-        return self.model_dump(exclude_none=True)
+    def pipeline_patch_data(self) -> dict[str, Any]:
+        data = self.model_dump(exclude_none=True)
+        data.pop("engines", None)
+        return data
 
 
 def create_app(workspace_root: Path | None = None) -> FastAPI:
@@ -56,13 +61,23 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
     def list_frames(roll_id: str):
         return workspace.list_frames(roll_id)
 
+    @app.get("/api/engines")
+    def get_engines():
+        return {
+            "filmcolor": {"available": True},
+            "negpy": get_negpy_status(),
+        }
+
     @app.get("/api/rolls/{roll_id}/frames/{frame_id}")
     def get_frame(roll_id: str, frame_id: str):
         return workspace.get_frame(roll_id, frame_id)
 
     @app.patch("/api/rolls/{roll_id}/frames/{frame_id}/pipeline")
     def patch_pipeline(roll_id: str, frame_id: str, request: PipelinePatchRequest):
-        return workspace.update_frame_pipeline(roll_id, frame_id, request.patch_data())
+        frame = workspace.update_frame_pipeline(roll_id, frame_id, request.pipeline_patch_data())
+        if request.engines:
+            frame = workspace.update_frame_engines(roll_id, frame_id, request.engines)
+        return frame
 
     @app.post("/api/rolls/{roll_id}/frames/{frame_id}/render-preview")
     def render_preview(roll_id: str, frame_id: str):
@@ -77,7 +92,8 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
                 frame.pipeline,
                 max_size=1600,
             )
-            frame.pipeline.mask.auto.confidence = diagnostics["mask_confidence"]
+            if frame.pipeline.engine == "filmcolor":
+                frame.pipeline.mask.auto.confidence = diagnostics.get("mask_confidence", 0.0)
             write_frame_sidecar(
                 workspace.root / "rolls" / roll_id / "frames" / f"{frame_id}.xmp.json",
                 frame,
@@ -90,6 +106,13 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
                 "diagnostics": diagnostics,
             }
         except Exception as exc:
+            frame = workspace.get_frame(roll_id, frame_id)
+            if frame.pipeline.engine == "negpy":
+                frame.engines.negpy.diagnostics["error"] = str(exc)
+                write_frame_sidecar(
+                    workspace.root / "rolls" / roll_id / "frames" / f"{frame_id}.xmp.json",
+                    frame,
+                )
             jobs.set_failed(job.id, str(exc))
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
