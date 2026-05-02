@@ -52,4 +52,11 @@ addopts = ["-p", "no:cacheprovider"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
+
+[tool.coverage.report]
+fail_under = 80
+exclude_also = [
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
