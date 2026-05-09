@@ -1,5 +1,12 @@
 export type OutputStyle = "faithful" | "neutral" | "share";
 export type ProcessingEngine = "filmcolor" | "negpy";
+export type SampleType = "film_base" | "gray" | "white";
+
+export interface SyncRequest {
+  source_frame_id: string;
+  target_frame_ids: string[];
+  fields: string[];
+}
 
 export interface EngineStatus {
   filmcolor: { available: true };

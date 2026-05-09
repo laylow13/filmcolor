@@ -1,7 +1,7 @@
 import { Aperture, Grid2X2, ImageIcon, Play, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { getEngines, listFrames, listRolls, renderPreview, setFrameEngine, setFrameStyle } from "./api";
-import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata } from "./types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getEngines, listFrames, listRolls, renderPreview, setFrameEngine, setFrameStyle, syncFrames } from "./api";
+import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata, SampleType, SyncRequest } from "./types";
 
 const styles: OutputStyle[] = ["faithful", "neutral", "share"];
 
@@ -14,6 +14,11 @@ export function App() {
   const [isRendering, setIsRendering] = useState(false);
   const [engines, setEngines] = useState<EngineStatus | null>(null);
   const [error, setError] = useState<string>("");
+  const [activeSampleType, setActiveSampleType] = useState<SampleType>("film_base");
+  const [selectedFrameIds, setSelectedFrameIds] = useState<Set<string>>(new Set());
+  const [previewNaturalSize, setPreviewNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const previewImgRef = useRef<HTMLImageElement>(null);
+  const prevSamplesRef = useRef<string>("");
 
   useEffect(() => {
     let ignore = false;
@@ -53,6 +58,18 @@ export function App() {
     [frames, selectedFrameId]
   );
 
+  useEffect(() => {
+    if (!selectedFrame || !selectedRollId) return;
+    const currentSamples = JSON.stringify(selectedFrame.pipeline.mask.samples);
+    if (prevSamplesRef.current && prevSamplesRef.current !== currentSamples && previewUrl) {
+      const timer = setTimeout(() => {
+        handleRenderPreview();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    prevSamplesRef.current = currentSamples;
+  }, [selectedFrame?.pipeline.mask.samples]);
+
   async function chooseEngine(engine: ProcessingEngine) {
     if (!selectedRollId || !selectedFrame) return;
     try {
@@ -88,6 +105,61 @@ export function App() {
       setError(err instanceof Error ? err.message : "Render failed");
     } finally {
       setIsRendering(false);
+    }
+  }
+
+  async function sendSamples(frame: FrameSidecar) {
+    if (!selectedRollId) return;
+    const resp = await fetch(`/api/rolls/${selectedRollId}/frames/${frame.frame_id}/pipeline`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mask: { samples: frame.pipeline.mask.samples } })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const updated = await resp.json() as FrameSidecar;
+    setFrames((current) =>
+      current.map((f) => (f.frame_id === updated.frame_id ? updated : f))
+    );
+  }
+
+  function handlePreviewClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!selectedFrame || !previewNaturalSize || !previewImgRef.current) return;
+    const imgEl = previewImgRef.current;
+    const displayW = imgEl.clientWidth;
+    const displayH = imgEl.clientHeight;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / displayW) * previewNaturalSize.w);
+    const y = Math.round(((e.clientY - rect.top) / displayH) * previewNaturalSize.h);
+
+    const oldSamples = selectedFrame.pipeline.mask.samples;
+    const samples = {
+      film_base: [...oldSamples.film_base],
+      gray: [...oldSamples.gray],
+      white: [...oldSamples.white],
+    };
+    samples[activeSampleType] = [...samples[activeSampleType], [x, y]];
+    const updated = {
+      ...selectedFrame,
+      pipeline: { ...selectedFrame.pipeline, mask: { ...selectedFrame.pipeline.mask, samples } }
+    };
+    setFrames((current) => current.map((f) => (f.frame_id === updated.frame_id ? updated : f)));
+    sendSamples(updated);
+  }
+
+  async function handleSync() {
+    if (!selectedRollId || !selectedFrame || selectedFrameIds.size === 0) return;
+    try {
+      const req: SyncRequest = {
+        source_frame_id: selectedFrame.frame_id,
+        target_frame_ids: [...selectedFrameIds],
+        fields: ["mask.samples", "tone.style", "tone.exposure", "tone.contrast"]
+      };
+      await syncFrames(selectedRollId, req);
+      setSelectedFrameIds(new Set());
+      const items = await listFrames(selectedRollId);
+      setFrames(items);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Sync failed");
     }
   }
 
@@ -129,14 +201,40 @@ export function App() {
           </button>
         </header>
 
-        <div className="preview">
+        <div className="previewWrap" onClick={handlePreviewClick}>
           {isRendering ? (
             <div className="previewLoading">
               <ImageIcon size={34} />
               <span>Rendering...</span>
             </div>
           ) : previewUrl ? (
-            <img src={previewUrl} alt="Rendered film preview" />
+            <>
+              <img
+                ref={previewImgRef}
+                src={previewUrl}
+                alt="Rendered film preview"
+                onLoad={(e) => {
+                  setPreviewNaturalSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
+                }}
+              />
+              {selectedFrame && previewNaturalSize && previewImgRef.current && (() => {
+                const markers: { x: number; y: number; type: SampleType }[] = [];
+                const s = selectedFrame.pipeline.mask.samples;
+                for (const p of s.film_base) markers.push({ x: p[0], y: p[1], type: "film_base" as SampleType });
+                for (const p of s.gray) markers.push({ x: p[0], y: p[1], type: "gray" as SampleType });
+                for (const p of s.white) markers.push({ x: p[0], y: p[1], type: "white" as SampleType });
+                const imgEl = previewImgRef.current;
+                const scaleX = imgEl.clientWidth / previewNaturalSize.w;
+                const scaleY = imgEl.clientHeight / previewNaturalSize.h;
+                return markers.map((m, i) => (
+                  <div
+                    key={i}
+                    className={`sampleMarker ${m.type}`}
+                    style={{ left: m.x * scaleX, top: m.y * scaleY }}
+                  />
+                ));
+              })()}
+            </>
           ) : (
             <div className="previewEmpty">
               <ImageIcon size={34} />
@@ -148,15 +246,33 @@ export function App() {
         <div className="gridHeader">
           <Grid2X2 size={16} />
           <span>Contact Sheet</span>
+          {selectedFrameIds.size > 0 && selectedFrame && (
+            <div className="syncBar">
+              <span>{selectedFrameIds.size} selected</span>
+              <button onClick={handleSync}>Sync from {selectedFrame.frame_id}</button>
+            </div>
+          )}
         </div>
         <div className="frames">
           {frames.map((frame) => (
             <button
               key={frame.frame_id}
-              className={frame.frame_id === selectedFrameId ? "frame active" : "frame"}
-              onClick={() => {
-                setSelectedFrameId(frame.frame_id);
-                setPreviewUrl("");
+              className={
+                (frame.frame_id === selectedFrameId ? "frame active" : "frame") +
+                (selectedFrameIds.has(frame.frame_id) ? " selected" : "")
+              }
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  setSelectedFrameIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(frame.frame_id)) next.delete(frame.frame_id);
+                    else next.add(frame.frame_id);
+                    return next;
+                  });
+                } else {
+                  setSelectedFrameId(frame.frame_id);
+                  setPreviewUrl("");
+                }
               }}
             >
               <span>{frame.frame_id}</span>
@@ -192,6 +308,59 @@ export function App() {
         ) : (
           <p className="engineNote">NegPy Experimental · CPU backend · {engines?.negpy.reason ?? "Checking NegPy availability..."}</p>
         )}
+        <div className="sectionLabel">SAMPLES</div>
+        <div className="sampleTools">
+          <button
+            className={activeSampleType === "film_base" ? "activeFilmBase" : ""}
+            onClick={() => setActiveSampleType("film_base")}
+          >
+            Film Base
+          </button>
+          <button
+            className={activeSampleType === "gray" ? "activeGray" : ""}
+            onClick={() => setActiveSampleType("gray")}
+          >
+            Gray
+          </button>
+          <button
+            className={activeSampleType === "white" ? "activeWhite" : ""}
+            onClick={() => setActiveSampleType("white")}
+          >
+            White
+          </button>
+        </div>
+        {selectedFrame && (() => {
+          const samples = selectedFrame.pipeline.mask.samples;
+          const items: { type: SampleType; x: number; y: number }[] = [];
+          for (const s of samples.film_base) items.push({ type: "film_base" as SampleType, x: s[0], y: s[1] });
+          for (const s of samples.gray) items.push({ type: "gray" as SampleType, x: s[0], y: s[1] });
+          for (const s of samples.white) items.push({ type: "white" as SampleType, x: s[0], y: s[1] });
+          if (items.length === 0) return null;
+          return (
+            <div className="sampleList">
+              {items.map((item, i) => (
+                <div className="sampleItem" key={i}>
+                  <span className={`sampleDot ${item.type}`} />
+                  <span>{item.type}</span>
+                  <span>({item.x}, {item.y})</span>
+                  <button
+                    onClick={() => {
+                      const updated = { ...selectedFrame };
+                      const newSamples = { ...updated.pipeline.mask.samples };
+                      const arr = newSamples[item.type].filter((p: number[]) => !(p[0] === item.x && p[1] === item.y));
+                      newSamples[item.type] = arr;
+                      updated.pipeline = { ...updated.pipeline, mask: { ...updated.pipeline.mask, samples: newSamples } };
+                      setFrames((current) => current.map((f) => (f.frame_id === updated.frame_id ? updated : f)));
+                      sendSamples(updated);
+                    }}
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <div className="sectionLabel">STYLE</div>
         <div className="segmented">
           {styles.map((style) => (

@@ -1,4 +1,4 @@
-import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata } from "./types";
+import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata, SyncRequest } from "./types";
 
 export async function getEngines(): Promise<EngineStatus> {
   const response = await fetch("/api/engines");
@@ -48,6 +48,15 @@ export async function setFrameStyle(
 export async function renderPreview(rollId: string, frameId: string): Promise<{ preview_url: string }> {
   const response = await fetch(`/api/rolls/${rollId}/frames/${frameId}/render-preview`, {
     method: "POST"
+  });
+  return readJson(response);
+}
+
+export async function syncFrames(rollId: string, request: SyncRequest): Promise<{ synced_count: number }> {
+  const response = await fetch(`/api/rolls/${rollId}/frames/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request)
   });
   return readJson(response);
 }
