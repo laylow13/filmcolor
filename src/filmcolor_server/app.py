@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from filmcolor_core.models import FrameSidecar, FrameStatus
 from filmcolor_core.negpy_adapter import get_negpy_status
 from filmcolor_core.render import render_preview_file
 from filmcolor_core.sidecar import write_frame_sidecar
@@ -31,6 +33,23 @@ class PipelinePatchRequest(BaseModel):
         data = self.model_dump(exclude_none=True)
         data.pop("engines", None)
         return data
+
+
+SYNCABLE_FIELDS = {"mask.samples", "tone.style", "tone.exposure", "tone.contrast"}
+
+
+class SyncRequest(BaseModel):
+    source_frame_id: str
+    target_frame_ids: list[str]
+    fields: list[str]
+
+
+def _copy_nested(src: dict[str, Any], dst: dict[str, Any], dotted: str) -> None:
+    keys = dotted.split(".")
+    for key in keys[:-1]:
+        src = src[key]
+        dst = dst[key]
+    dst[keys[-1]] = copy.deepcopy(src[keys[-1]])
 
 
 def create_app(workspace_root: Path | None = None) -> FastAPI:
@@ -87,6 +106,33 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
         if request.engines:
             frame = workspace.update_frame_engines(roll_id, frame_id, request.engines)
         return frame
+
+    @app.post("/api/rolls/{roll_id}/frames/sync")
+    def sync_frames(roll_id: str, request: SyncRequest):
+        invalid = [f for f in request.fields if f not in SYNCABLE_FIELDS]
+        if invalid:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Fields not syncable: {invalid}. Valid fields: {sorted(SYNCABLE_FIELDS)}",
+            )
+
+        source = workspace.get_frame(roll_id, request.source_frame_id)
+        source_data = source.model_dump(mode="json")
+
+        synced = 0
+        for target_id in request.target_frame_ids:
+            if target_id == request.source_frame_id:
+                continue
+            frame = workspace.get_frame(roll_id, target_id)
+            frame_data = frame.model_dump(mode="json")
+            for field in request.fields:
+                _copy_nested(source_data["pipeline"], frame_data["pipeline"], field)
+            updated = FrameSidecar.model_validate(frame_data)
+            updated.status = FrameStatus.MANUALLY_ADJUSTED
+            write_frame_sidecar(workspace._frame_path(roll_id, target_id), updated)
+            synced += 1
+
+        return {"synced_count": synced}
 
     @app.post("/api/rolls/{roll_id}/frames/{frame_id}/render-preview")
     def render_preview(roll_id: str, frame_id: str):

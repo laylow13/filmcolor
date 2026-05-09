@@ -112,3 +112,62 @@ def test_engines_endpoint_returns_unavailable_when_status_check_crashes(workspac
     assert response.json()["filmcolor"]["available"] is True
     assert response.json()["negpy"]["available"] is False
     assert "status check exploded" in response.json()["negpy"]["reason"]
+
+
+def test_sync_endpoint_copies_fields_to_target_frames(workspace_tmp_path: Path):
+    source_dir = workspace_tmp_path / "source"
+    source_dir.mkdir()
+    Image.new("RGB", (4, 4), color=(10, 20, 30)).save(source_dir / "IMG_0001.png")
+    Image.new("RGB", (4, 4), color=(40, 50, 60)).save(source_dir / "IMG_0002.png")
+    Image.new("RGB", (4, 4), color=(70, 80, 90)).save(source_dir / "IMG_0003.png")
+
+    client = TestClient(create_app(workspace_root=workspace_tmp_path / "workspace"))
+    roll = client.post("/api/rolls/import", json={"source_dir": str(source_dir), "name": "SyncTest"}).json()
+
+    # Set up source frame with custom samples
+    client.patch(
+        f"/api/rolls/{roll['id']}/frames/IMG_0001/pipeline",
+        json={"mask": {"samples": {"film_base": [[10, 20]], "gray": [[50, 60]]}}, "tone": {"style": "share"}},
+    )
+
+    # Sync to IMG_0002 and IMG_0003
+    response = client.post(
+        f"/api/rolls/{roll['id']}/frames/sync",
+        json={
+            "source_frame_id": "IMG_0001",
+            "target_frame_ids": ["IMG_0002", "IMG_0003"],
+            "fields": ["mask.samples", "tone.style"],
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["synced_count"] == 2
+
+    frame2 = client.get(f"/api/rolls/{roll['id']}/frames/IMG_0002").json()
+    assert frame2["pipeline"]["mask"]["samples"]["film_base"] == [[10, 20]]
+    assert frame2["pipeline"]["tone"]["style"] == "share"
+
+    frame3 = client.get(f"/api/rolls/{roll['id']}/frames/IMG_0003").json()
+    assert frame3["pipeline"]["tone"]["style"] == "share"
+
+
+def test_sync_endpoint_rejects_invalid_field(workspace_tmp_path: Path):
+    source_dir = workspace_tmp_path / "source"
+    source_dir.mkdir()
+    Image.new("RGB", (4, 4), color=(10, 20, 30)).save(source_dir / "IMG_0001.png")
+    Image.new("RGB", (4, 4), color=(40, 50, 60)).save(source_dir / "IMG_0002.png")
+
+    client = TestClient(create_app(workspace_root=workspace_tmp_path / "workspace"))
+    roll = client.post("/api/rolls/import", json={"source_dir": str(source_dir), "name": "SyncTest"}).json()
+
+    response = client.post(
+        f"/api/rolls/{roll['id']}/frames/sync",
+        json={
+            "source_frame_id": "IMG_0001",
+            "target_frame_ids": ["IMG_0002"],
+            "fields": ["source.path"],
+        },
+    )
+
+    assert response.status_code == 422
