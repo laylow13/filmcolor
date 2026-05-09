@@ -1,12 +1,16 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from filmcolor_core import __version__
 from filmcolor_core.models import OutputStyle, PipelineSettings
 from filmcolor_core.pipeline import (
+    _sample_pixels,
     apply_output_style,
+    compute_gray_balance,
+    compute_white_reference,
     estimate_mask_gain,
     invert_linear,
     normalize_black_white,
@@ -131,3 +135,46 @@ def test_render_preview_file_writes_webp(workspace_tmp_path: Path):
     assert output.exists()
     assert diagnostics["mask_confidence"] == 0.55
     assert Image.open(output).size == (4, 4)
+
+
+def test_compute_gray_balance_returns_identity_when_no_samples():
+    image = np.ones((4, 4, 3), dtype=np.float32) * 0.5
+    result = compute_gray_balance(image, [])
+    assert result == [1.0, 1.0, 1.0]
+
+
+def test_compute_gray_balance_neutralizes_gray_pixels():
+    image = np.ones((4, 4, 3), dtype=np.float32)
+    original = np.array([0.5, 0.25, 1.0], dtype=np.float32)
+    image[1, 1] = original  # magenta-ish gray sample
+
+    result = compute_gray_balance(image, [[1, 1]])
+    gain = np.array(result, dtype=np.float32)
+
+    # Applying the gain should make the sampled pixel roughly equal R=G=B
+    neutralized = original * gain
+    assert neutralized[0] == pytest.approx(neutralized[1], abs=0.05)
+    assert neutralized[0] == pytest.approx(neutralized[2], abs=0.05)
+    assert neutralized[1] == pytest.approx(neutralized[2], abs=0.05)
+
+
+def test_compute_white_reference_returns_one_when_no_samples():
+    image = np.ones((4, 4, 3), dtype=np.float32) * 0.5
+    result = compute_white_reference(image, [])
+    assert result == 1.0
+
+
+def test_compute_white_reference_uses_sample_luminance():
+    image = np.ones((4, 4, 3), dtype=np.float32) * 0.5
+    image[2, 2] = [0.9, 0.88, 0.92]
+
+    result = compute_white_reference(image, [[2, 2]])
+
+    assert result > 0.8
+
+
+def test_sample_pixels_ignores_out_of_bounds():
+    image = np.ones((4, 4, 3), dtype=np.float32)
+    result = _sample_pixels(image, [[1, 1], [-1, -1], [99, 99], [2, 2]])
+
+    assert len(result) == 2
