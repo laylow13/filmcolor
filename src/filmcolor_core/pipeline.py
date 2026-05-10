@@ -119,7 +119,20 @@ def render_pipeline_array(
     if max_size is not None:
         styled = resize_float_image(styled, max_size=max_size)
     rendered = np.clip(styled * 255.0 + 0.5, 0, 255).astype(np.uint8)
-    return rendered, {"mask_confidence": estimate.confidence}
+
+    sampled_values: dict[str, list[list[float]]] = {}
+    for sample_type, samples in [
+        ("film_base", settings.mask.samples.film_base),
+        ("gray", settings.mask.samples.gray),
+        ("white", settings.mask.samples.white),
+    ]:
+        pixels = _sample_pixels(image, samples)
+        sampled_values[sample_type] = [p.tolist() for p in pixels]
+
+    return rendered, {
+        "mask_confidence": estimate.confidence,
+        "sampled_values": sampled_values,
+    }
 
 
 def resize_float_image(image: np.ndarray, max_size: int) -> np.ndarray:

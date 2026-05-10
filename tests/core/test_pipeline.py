@@ -178,3 +178,24 @@ def test_sample_pixels_ignores_out_of_bounds():
     result = _sample_pixels(image, [[1, 1], [-1, -1], [99, 99], [2, 2]])
 
     assert len(result) == 2
+
+
+def test_render_pipeline_array_includes_sampled_values():
+    image = np.ones((4, 4, 3), dtype=np.float32) * 0.3
+    image[0, 0] = [0.8, 0.6, 0.4]
+    image[2, 2] = [0.1, 0.2, 0.3]
+
+    settings = PipelineSettings()
+    settings.mask.samples.film_base = [[0, 0]]
+    settings.mask.samples.gray = [[2, 2]]
+
+    _, diagnostics = render_pipeline_array(image, settings, max_size=4)
+
+    assert "sampled_values" in diagnostics
+    sv = diagnostics["sampled_values"]
+    assert len(sv["film_base"]) == 1
+    assert len(sv["gray"]) == 1
+    assert len(sv["white"]) == 0
+    fb = sv["film_base"][0]
+    assert len(fb) == 3
+    assert abs(fb[0] - 0.8) < 0.05
