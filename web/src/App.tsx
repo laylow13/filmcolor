@@ -142,6 +142,7 @@ export function App() {
       setFrames((current) =>
         current.map((frame) => (frame.frame_id === updated.frame_id ? updated : frame))
       );
+      handleRenderPreview();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to update style");
     }
@@ -180,6 +181,8 @@ export function App() {
     }
   }
 
+  const toneTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   async function updateTone(patch: Record<string, unknown>) {
     if (!selectedRollId || !selectedFrame) return;
     const resp = await fetch(`/api/rolls/${selectedRollId}/frames/${selectedFrame.frame_id}/pipeline`, {
@@ -192,7 +195,11 @@ export function App() {
     setFrames((current) =>
       current.map((f) => (f.frame_id === updated.frame_id ? updated : f))
     );
+    if (toneTimerRef.current) clearTimeout(toneTimerRef.current);
+    toneTimerRef.current = setTimeout(() => handleRenderPreview(), 400);
   }
+
+  const samplesTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   async function sendSamples(frame: FrameSidecar) {
     if (!selectedRollId) return;
@@ -206,6 +213,8 @@ export function App() {
     setFrames((current) =>
       current.map((f) => (f.frame_id === updated.frame_id ? updated : f))
     );
+    if (samplesTimerRef.current) clearTimeout(samplesTimerRef.current);
+    samplesTimerRef.current = setTimeout(() => handleRenderPreview(), 500);
   }
 
   function handlePreviewClick(e: React.MouseEvent<HTMLDivElement>) {

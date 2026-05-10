@@ -341,7 +341,9 @@ button {
 .previewWrap {
   position: relative;
   display: grid;
+  place-items: center;
   min-height: 320px;
+  max-height: 520px;
   overflow: hidden;
   border: 1px solid #ded8cc;
   background: #fffefa;
@@ -350,7 +352,7 @@ button {
 
 .previewWrap img {
   max-width: 100%;
-  max-height: 100%;
+  max-height: 520px;
   object-fit: contain;
 }
 
@@ -533,15 +535,16 @@ button {
 
 .frameThumb {
   position: absolute;
-  inset: 0;
+  inset: 6px 6px auto 6px;
+  height: 48px;
   background-size: cover;
   background-position: center;
-  opacity: 0.2;
-  border-radius: 6px;
+  opacity: 0.3;
+  border-radius: 4px;
 }
 
 .frame.active .frameThumb {
-  opacity: 0.3;
+  opacity: 0.4;
 }
 
 .frame span,
