@@ -54,7 +54,7 @@ export async function setFrameStyle(
   return readJson(response);
 }
 
-export async function renderPreview(rollId: string, frameId: string): Promise<{ preview_url: string }> {
+export async function renderPreview(rollId: string, frameId: string): Promise<{ preview_url: string; diagnostics?: Record<string, unknown> }> {
   const response = await fetch(`/api/rolls/${rollId}/frames/${frameId}/render-preview`, {
     method: "POST"
   });

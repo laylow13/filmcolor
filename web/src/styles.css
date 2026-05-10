@@ -634,3 +634,56 @@ button {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* U6: sample value display */
+.sampleValue {
+  color: #706a60;
+  font-size: 11px;
+}
+
+/* U8: collapsible panel sections */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 10px;
+}
+
+.sectionHeader .chevron {
+  transition: transform 0.2s;
+  font-size: 10px;
+  color: #9a3412;
+}
+
+.sectionHeader .chevron.open {
+  transform: rotate(90deg);
+}
+
+.sectionBody {
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.2s;
+}
+
+.sectionBody.collapsed {
+  max-height: 0 !important;
+  opacity: 0;
+  margin: 0;
+}
+
+/* U10: select all button */
+.selectAllBtn {
+  padding: 4px 10px;
+  border: 1px solid #d8d1c4;
+  border-radius: 4px;
+  background: #fffdf8;
+  color: #706a60;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.selectAllBtn:hover {
+  border-color: #c26b2b;
+  color: #c26b2b;
+}
