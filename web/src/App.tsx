@@ -1,6 +1,6 @@
 import { Aperture, Grid2X2, ImageIcon, Play, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getEngines, listFrames, listRolls, renderPreview, setFrameEngine, setFrameStyle, syncFrames } from "./api";
+import { getEngines, importRoll, listFrames, listRolls, renderPreview, setFrameEngine, setFrameStyle, syncFrames } from "./api";
 import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata, SampleType, SyncRequest } from "./types";
 
 const styles: OutputStyle[] = ["faithful", "neutral", "share"];
@@ -19,6 +19,12 @@ export function App() {
   const [previewNaturalSize, setPreviewNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const previewImgRef = useRef<HTMLImageElement>(null);
   const prevSamplesRef = useRef<string>("");
+  const [showImport, setShowImport] = useState(false);
+  const [importPath, setImportPath] = useState("");
+  const [importName, setImportName] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string>("");
+  const [previewedFrames, setPreviewedFrames] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let ignore = false;
@@ -101,11 +107,44 @@ export function App() {
     try {
       const result = await renderPreview(selectedRollId, selectedFrame.frame_id);
       setPreviewUrl(`${result.preview_url}?t=${Date.now()}`);
+      setPreviewedFrames((prev) => new Set(prev).add(selectedFrame.frame_id));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Render failed");
     } finally {
       setIsRendering(false);
     }
+  }
+
+  async function handleImport() {
+    if (!importPath.trim() || !importName.trim()) return;
+    setImporting(true);
+    try {
+      await importRoll(importPath.trim(), importName.trim());
+      const items = await listRolls();
+      setRolls(items);
+      setSelectedRollId(items[items.length - 1]?.id ?? "");
+      setShowImport(false);
+      setImportPath("");
+      setImportName("");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function updateTone(patch: Record<string, unknown>) {
+    if (!selectedRollId || !selectedFrame) return;
+    const resp = await fetch(`/api/rolls/${selectedRollId}/frames/${selectedFrame.frame_id}/pipeline`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tone: patch })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const updated = await resp.json() as FrameSidecar;
+    setFrames((current) =>
+      current.map((f) => (f.frame_id === updated.frame_id ? updated : f))
+    );
   }
 
   async function sendSamples(frame: FrameSidecar) {
@@ -154,7 +193,9 @@ export function App() {
         target_frame_ids: [...selectedFrameIds],
         fields: ["mask.samples", "tone.style", "tone.exposure", "tone.contrast"]
       };
-      await syncFrames(selectedRollId, req);
+      const result = await syncFrames(selectedRollId, req);
+      setSyncMessage(`Synced ${result.synced_count} frame${result.synced_count !== 1 ? "s" : ""}`);
+      setTimeout(() => setSyncMessage(""), 3000);
       setSelectedFrameIds(new Set());
       const items = await listFrames(selectedRollId);
       setFrames(items);
@@ -174,6 +215,34 @@ export function App() {
           <h1>Filmcolor</h1>
         </div>
         <div className="sectionLabel">ROLL</div>
+        {showImport ? (
+          <div className="importForm">
+            <input
+              type="text"
+              placeholder="Folder path (e.g. D:/scans/roll-001)"
+              value={importPath}
+              onChange={(e) => setImportPath(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Roll name"
+              value={importName}
+              onChange={(e) => setImportName(e.target.value)}
+            />
+            <div className="importActions">
+              <button onClick={handleImport} disabled={importing} className="importBtn" style={{ fontSize: "12px" }}>
+                {importing ? "Importing..." : "Import"}
+              </button>
+              <button onClick={() => setShowImport(false)} className="cancelBtn">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowImport(true)} className="importBtn" style={{ marginBottom: "12px" }}>
+            + Import Roll
+          </button>
+        )}
         {rolls.length === 0 ? (
           <div className="empty">No rolls imported</div>
         ) : (
@@ -217,6 +286,15 @@ export function App() {
                   setPreviewNaturalSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
                 }}
               />
+              {previewUrl && (
+                <div className="sampleCursorLabel">
+                  <span className="sampleCursorDot" style={{
+                    background: activeSampleType === "film_base" ? "#c26b2b" : activeSampleType === "gray" ? "#808080" : "#ddd",
+                    border: activeSampleType === "white" ? "1px solid #999" : "none"
+                  }} />
+                  Placing: {activeSampleType === "film_base" ? "Film Base" : activeSampleType === "gray" ? "Gray" : "White"}
+                </div>
+              )}
               {selectedFrame && previewNaturalSize && previewImgRef.current && (() => {
                 const markers: { x: number; y: number; type: SampleType }[] = [];
                 const s = selectedFrame.pipeline.mask.samples;
@@ -275,6 +353,12 @@ export function App() {
                 }
               }}
             >
+              {previewedFrames.has(frame.frame_id) && selectedRollId && (
+                <div
+                  className="frameThumb"
+                  style={{ backgroundImage: `url(/api/rolls/${selectedRollId}/frames/${frame.frame_id}/preview)` }}
+                />
+              )}
               <span>{frame.frame_id}</span>
               <small>{frame.status}</small>
             </button>
@@ -391,21 +475,58 @@ export function App() {
             </dl>
           </div>
         ) : (
+          <>
           <dl className="readout">
             <div>
               <dt>Mask confidence</dt>
               <dd>{selectedFrame?.pipeline.mask.auto.confidence.toFixed(2) ?? "0.00"}</dd>
             </div>
-            <div>
-              <dt>Exposure</dt>
-              <dd>{selectedFrame?.pipeline.tone.exposure.toFixed(2) ?? "0.00"}</dd>
-            </div>
-            <div>
-              <dt>Contrast</dt>
-              <dd>{selectedFrame?.pipeline.tone.contrast.toFixed(2) ?? "0.00"}</dd>
-            </div>
           </dl>
+          <div className="toneSlider">
+            <label>
+              Exposure
+              <span>{(selectedFrame?.pipeline.tone.exposure ?? 0).toFixed(1)}</span>
+            </label>
+            <input
+              type="range"
+              min="-3"
+              max="3"
+              step="0.1"
+              value={selectedFrame?.pipeline.tone.exposure ?? 0}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!selectedFrame) return;
+                const updated = { ...selectedFrame, pipeline: { ...selectedFrame.pipeline, tone: { ...selectedFrame.pipeline.tone, exposure: val } } };
+                setFrames((current) => current.map((f) => (f.frame_id === updated.frame_id ? updated : f)));
+                updateTone({ exposure: val });
+              }}
+            />
+          </div>
+          <div className="toneSlider">
+            <label>
+              Contrast
+              <span>{(selectedFrame?.pipeline.tone.contrast ?? 0.12).toFixed(2)}</span>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={selectedFrame?.pipeline.tone.contrast ?? 0.12}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!selectedFrame) return;
+                const updated = { ...selectedFrame, pipeline: { ...selectedFrame.pipeline, tone: { ...selectedFrame.pipeline.tone, contrast: val } } };
+                setFrames((current) => current.map((f) => (f.frame_id === updated.frame_id ? updated : f)));
+                updateTone({ contrast: val });
+              }}
+            />
+          </div>
+          </>
         )}
+        {syncMessage ? (
+          <div className="syncToast">{syncMessage}</div>
+        ) : null}
         {error ? (
           <div className="errorBanner">
             <span>{error}</span>

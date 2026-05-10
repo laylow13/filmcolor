@@ -10,6 +10,15 @@ export async function listRolls(): Promise<RollMetadata[]> {
   return readJson(response);
 }
 
+export async function importRoll(sourceDir: string, name: string): Promise<RollMetadata> {
+  const response = await fetch("/api/rolls/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_dir: sourceDir, name })
+  });
+  return readJson(response);
+}
+
 export async function listFrames(rollId: string): Promise<FrameSidecar[]> {
   const response = await fetch(`/api/rolls/${rollId}/frames`);
   return readJson(response);
