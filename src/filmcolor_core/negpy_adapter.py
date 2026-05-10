@@ -106,7 +106,15 @@ def _run_negpy_cpu(source_path: Path, max_size: int) -> tuple[np.ndarray, dict[s
     if not isinstance(processed, np.ndarray):
         raise NegPyUnavailable("NegPy CPU render did not return an in-memory ndarray")
 
-    return processed.astype(np.float32, copy=False), dict(metrics or {})
+    safe_metrics: dict[str, Any] = {}
+    for k, v in (metrics or {}).items():
+        if isinstance(v, np.ndarray):
+            safe_metrics[k] = v.tolist()
+        elif hasattr(v, "item"):
+            safe_metrics[k] = v.item()
+        else:
+            safe_metrics[k] = v
+    return processed.astype(np.float32, copy=False), safe_metrics
 
 
 def _import_negpy_modules(root: Path) -> dict[str, Any]:
