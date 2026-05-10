@@ -9,12 +9,13 @@ from filmcolor_core.models import OutputStyle, PipelineSettings
 from filmcolor_core.pipeline import (
     _sample_pixels,
     apply_output_style,
+    apply_sigmoid_curve,
     compute_gray_balance,
     compute_white_reference,
-    estimate_mask_gain,
-    invert_linear,
-    normalize_black_white,
+    find_channel_bounds,
+    normalize_log_channels,
     render_pipeline_array,
+    to_log_density,
 )
 
 
@@ -22,45 +23,47 @@ def test_core_package_imports():
     assert __version__ == "0.1.0"
 
 
-def test_normalize_black_white_clips_to_unit_range():
-    image = np.array([[[0.0, 0.5, 1.0], [1.5, -0.5, 0.25]]], dtype=np.float32)
-
-    result = normalize_black_white(image, black_point=0.0, white_point=1.0)
-
-    assert result.min() == 0.0
-    assert result.max() == 1.0
+def test_to_log_density_converts_linear_to_log():
+    image = np.ones((2, 2, 3), dtype=np.float64) * 0.5
+    D = to_log_density(image)
+    assert D.shape == (2, 2, 3)
+    np.testing.assert_allclose(D[0, 0, :], -np.log10(0.5), rtol=1e-4)
 
 
-def test_invert_linear_keeps_unit_range():
-    image = np.array([[[0.1, 0.25, 0.9]]], dtype=np.float32)
-
-    result = invert_linear(image)
-
-    np.testing.assert_allclose(
-        result,
-        np.array([[[0.9, 0.75, 0.1]]], dtype=np.float32),
-        atol=1e-6,
-    )
+def test_find_channel_bounds_returns_percentile_estimates():
+    D = np.random.rand(100, 100, 3).astype(np.float64) * 3.0
+    floors, ceils, conf = find_channel_bounds(D, film_base_samples=None)
+    assert conf == 0.55
+    assert all(floors < ceils)
+    assert floors.shape == (3,)
+    assert ceils.shape == (3,)
 
 
-def test_estimate_mask_gain_uses_samples_when_present():
-    image = np.ones((4, 4, 3), dtype=np.float32)
-    image[1, 1] = [0.5, 1.0, 2.0]
-
-    estimate = estimate_mask_gain(image, film_base_samples=[[1, 1]])
-
-    np.testing.assert_allclose(estimate.rgb_gain, [2.0, 1.0, 0.5], rtol=1e-5)
-    assert estimate.confidence == 1.0
+def test_find_channel_bounds_uses_film_base_samples():
+    D = np.ones((10, 10, 3), dtype=np.float64) * 2.0
+    D[1, 1] = [0.5, 0.6, 0.7]  # film_base sample here
+    floors, ceils, conf = find_channel_bounds(D, film_base_samples=[[1, 1]])
+    assert conf == 1.0
+    np.testing.assert_allclose(floors, [0.5, 0.6, 0.7], rtol=1e-5)
 
 
-def test_estimate_mask_gain_falls_back_to_gray_world():
-    image = np.zeros((2, 2, 3), dtype=np.float32)
-    image[:, :] = [0.5, 1.0, 2.0]
+def test_normalize_log_channels_produces_unit_range():
+    D = np.ones((4, 4, 3), dtype=np.float64) * 1.5
+    floors = np.array([1.0, 1.0, 1.0], dtype=np.float64)
+    ceils = np.array([2.0, 2.0, 2.0], dtype=np.float64)
+    result = normalize_log_channels(D, floors, ceils)
+    assert result.min() >= 0.0
+    assert result.max() <= 1.0
+    # Middle value should be approximately 0.5 after inversion
+    np.testing.assert_allclose(result[0, 0, 0], 0.5, atol=0.1)
 
-    estimate = estimate_mask_gain(image, film_base_samples=[])
 
-    np.testing.assert_allclose(estimate.rgb_gain, [2.0, 1.0, 0.5], rtol=1e-5)
-    assert estimate.confidence == 0.55
+def test_apply_sigmoid_curve_produces_unit_range():
+    image = np.random.rand(10, 10, 3).astype(np.float64)
+    result = apply_sigmoid_curve(image, density=0.05, grade=0.0)
+    assert result.min() >= 0.0
+    assert result.max() <= 1.0
+    assert result.dtype == np.float32
 
 
 def test_output_styles_have_different_contrast_strengths():
@@ -81,6 +84,7 @@ def test_render_pipeline_array_returns_uint8_preview():
     assert rendered.dtype == np.uint8
     assert rendered.shape == (4, 4, 3)
     assert diagnostics["mask_confidence"] == 0.55
+    assert "sampled_values" in diagnostics
 
 
 def test_decode_to_linear_rgb_reads_common_image_fixture(workspace_tmp_path: Path):

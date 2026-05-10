@@ -97,6 +97,8 @@ class ToneSettings(BaseModel):
     style: OutputStyle = OutputStyle.FAITHFUL
     exposure: float = 0.0
     contrast: float = 0.12
+    density: float = 0.05
+    grade: float = 0.0
     black_point: float = 0.004
     white_point: float = 0.985
 

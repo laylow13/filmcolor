@@ -3,7 +3,13 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-from filmcolor_core.models import MaskAutoEstimate, OutputStyle, PipelineSettings
+from filmcolor_core.models import OutputStyle, PipelineSettings
+
+EPSILON = 1e-6
+DEFAULT_DENSITY = 0.05
+DEFAULT_GAMMA = 2.2
+DEFAULT_P_LOW = 0.3
+DEFAULT_P_HIGH = 99.7
 
 
 def _sample_pixels(image: np.ndarray, samples: list[list[int]]) -> list[np.ndarray]:
@@ -16,34 +22,64 @@ def _sample_pixels(image: np.ndarray, samples: list[list[int]]) -> list[np.ndarr
     return result
 
 
-def normalize_black_white(image: np.ndarray, black_point: float, white_point: float) -> np.ndarray:
-    denominator = max(white_point - black_point, 1e-6)
-    return np.clip((image.astype(np.float32) - black_point) / denominator, 0.0, 1.0)
+def _sigmoid(x: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-np.clip(x, -50.0, 50.0)))
 
 
-def invert_linear(image: np.ndarray) -> np.ndarray:
-    return np.clip(1.0 - image.astype(np.float32), 0.0, 1.0)
+def to_log_density(image: np.ndarray) -> np.ndarray:
+    """Convert linear float32 [0,1] to log-density space."""
+    return -np.log10(np.clip(image.astype(np.float64), EPSILON, 1.0))
 
 
-def estimate_mask_gain(
+def find_channel_bounds(
+    density: np.ndarray,
+    film_base_samples: list[list[int]] | None = None,
+    p_low: float = DEFAULT_P_LOW,
+    p_high: float = DEFAULT_P_HIGH,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Find per-channel D-min (floors) and D-max (ceils).
+
+    If film_base_samples are provided, D-min is estimated from those pixels.
+    Otherwise, percentile-based estimation is used.
+    """
+    if film_base_samples and len(film_base_samples) > 0:
+        sampled = _sample_pixels(density, film_base_samples)
+        if sampled:
+            floors = np.mean(np.stack(sampled), axis=0)
+            ceils = np.array([np.percentile(density[..., c], p_high) for c in range(3)])
+            ceils = np.maximum(ceils, floors + 0.01)
+            return floors.astype(np.float64), ceils.astype(np.float64), 1.0
+
+    floors = np.array([np.percentile(density[..., c], p_low) for c in range(3)], dtype=np.float64)
+    ceils = np.array([np.percentile(density[..., c], p_high) for c in range(3)], dtype=np.float64)
+    ceils = np.maximum(ceils, floors + 0.01)
+    return floors, ceils, 0.55
+
+
+def normalize_log_channels(density: np.ndarray, floors: np.ndarray, ceils: np.ndarray) -> np.ndarray:
+    """Per-channel independent stretch to [0,1], then invert for negative→positive."""
+    norm = np.zeros_like(density, dtype=np.float64)
+    for c in range(3):
+        denom = max(ceils[c] - floors[c], EPSILON)
+        norm[..., c] = np.clip((density[..., c] - floors[c]) / denom, 0.0, 1.0)
+    # Invert: dense areas (high D) map to bright (high signal)
+    return 1.0 - norm.astype(np.float64)
+
+
+def apply_sigmoid_curve(
     image: np.ndarray,
-    film_base_samples: list[list[int]],
-) -> MaskAutoEstimate:
-    linear = np.maximum(image.astype(np.float32), 1e-6)
-    sampled = _sample_pixels(linear, film_base_samples)
-    if sampled:
-        base = np.mean(np.stack(sampled), axis=0)
-        gain = _neutralizing_gain(base)
-        return MaskAutoEstimate(rgb_gain=gain.tolist(), confidence=1.0)
-
-    mean_rgb = linear.reshape(-1, 3).mean(axis=0)
-    gain = _neutralizing_gain(mean_rgb)
-    return MaskAutoEstimate(rgb_gain=gain.tolist(), confidence=0.55)
-
-
-def apply_channel_gain(image: np.ndarray, rgb_gain: list[float]) -> np.ndarray:
-    gain = np.array(rgb_gain, dtype=np.float32).reshape(1, 1, 3)
-    return np.clip(image.astype(np.float32) * gain, 0.0, 1.0)
+    density: float = DEFAULT_DENSITY,
+    grade: float = 0.0,
+    gamma: float = DEFAULT_GAMMA,
+) -> np.ndarray:
+    """Apply sigmoid H&D characteristic curve with density/grade control."""
+    pivot = 1.0 - (0.01 + density * 0.2)
+    slope = 1.0 + grade * 1.75
+    d_max = 3.5
+    diff = (image - pivot) * slope
+    d_out = d_max * _sigmoid(diff * 4.0)
+    transmittance = 10.0 ** (-d_out)
+    return np.clip(transmittance ** (1.0 / gamma), 0.0, 1.0).astype(np.float32)
 
 
 def compute_gray_balance(image: np.ndarray, gray_samples: list[list[int]]) -> list[float]:
@@ -72,6 +108,7 @@ def apply_output_style(
     exposure: float,
     contrast: float,
 ) -> np.ndarray:
+    """Post-processing style adjustments after the main pipeline."""
     exposed = np.clip(image.astype(np.float32) * (2.0**exposure), 0.0, 1.0)
     if style == OutputStyle.NEUTRAL:
         style_contrast = 0.92 + contrast
@@ -94,43 +131,66 @@ def render_pipeline_array(
     settings: PipelineSettings,
     max_size: int | None = None,
 ) -> tuple[np.ndarray, dict[str, float]]:
-    normalized = normalize_black_white(
-        image,
-        black_point=settings.tone.black_point,
-        white_point=settings.tone.white_point,
-    )
-    inverted = invert_linear(normalized) if settings.inversion.enabled else normalized
-    estimate = estimate_mask_gain(inverted, settings.mask.samples.film_base)
-    settings.mask.auto = estimate
-    balanced = apply_channel_gain(inverted, estimate.rgb_gain)
+    """V2 pipeline: log-density normalization with per-channel stretch and sigmoid curve.
 
-    gray_gain = compute_gray_balance(balanced, settings.mask.samples.gray)
-    balanced = apply_channel_gain(balanced, gray_gain)
+    1. Convert linear RGB to log-density space
+    2. Find per-channel D-min/D-max (from film_base samples or percentiles)
+    3. Per-channel independent stretch to [0,1], then invert
+    4. Apply sigmoid H&D characteristic curve
+    5. Apply gray balance from gray samples
+    6. Apply output style (faithful/neutral/share)
+    """
+    img_f64 = image.astype(np.float64)
 
-    white_ref = compute_white_reference(balanced, settings.mask.samples.white)
-    settings.tone.white_point = white_ref
+    # Step 1: Log-density conversion
+    D = to_log_density(img_f64)
 
+    # Step 2: Per-channel bounds with film_base sample support
+    film_base = settings.mask.samples.film_base if settings.mask.samples.film_base else None
+    floors, ceils, confidence = find_channel_bounds(D, film_base)
+    settings.mask.auto.confidence = confidence
+    settings.mask.auto.rgb_gain = [float(ceils[c] - floors[c]) for c in range(3)]
+
+    # Step 3: Per-channel normalize + invert
+    normalized = normalize_log_channels(D, floors, ceils)
+
+    # Step 4: Sigmoid H&D curve
+    density = getattr(settings.tone, "density", DEFAULT_DENSITY)
+    grade = getattr(settings.tone, "grade", 0.0)
+    curved = apply_sigmoid_curve(normalized, density=density, grade=grade)
+
+    # Step 5: Gray balance from samples
+    gray_gain = compute_gray_balance(curved, settings.mask.samples.gray)
+    if gray_gain != [1.0, 1.0, 1.0]:
+        g = np.array(gray_gain, dtype=np.float32).reshape(1, 1, 3)
+        curved = np.clip(curved.astype(np.float32) * g, 0.0, 1.0)
+
+    # Step 6: Output style
     styled = apply_output_style(
-        balanced,
+        curved,
         style=settings.tone.style,
         exposure=settings.tone.exposure,
         contrast=settings.tone.contrast,
     )
+
+    # Resize if needed
     if max_size is not None:
         styled = resize_float_image(styled, max_size=max_size)
+
     rendered = np.clip(styled * 255.0 + 0.5, 0, 255).astype(np.uint8)
 
+    # Collect sampled pixel values for diagnostics
     sampled_values: dict[str, list[list[float]]] = {}
     for sample_type, samples in [
         ("film_base", settings.mask.samples.film_base),
         ("gray", settings.mask.samples.gray),
         ("white", settings.mask.samples.white),
     ]:
-        pixels = _sample_pixels(image, samples)
+        pixels = _sample_pixels(img_f64, samples)
         sampled_values[sample_type] = [p.tolist() for p in pixels]
 
     return rendered, {
-        "mask_confidence": estimate.confidence,
+        "mask_confidence": confidence,
         "sampled_values": sampled_values,
     }
 

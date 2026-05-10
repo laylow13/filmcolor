@@ -40,7 +40,7 @@ class PipelinePatchRequest(BaseModel):
         return data
 
 
-SYNCABLE_FIELDS = {"mask.samples", "tone.style", "tone.exposure", "tone.contrast"}
+SYNCABLE_FIELDS = {"mask.samples", "tone.style", "tone.exposure", "tone.contrast", "tone.density", "tone.grade"}
 
 
 class SyncRequest(BaseModel):
