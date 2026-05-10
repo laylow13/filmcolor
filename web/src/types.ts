@@ -47,6 +47,8 @@ export interface FrameSidecar {
       style: OutputStyle;
       exposure: number;
       contrast: number;
+      density: number;
+      grade: number;
       black_point: number;
       white_point: number;
     };

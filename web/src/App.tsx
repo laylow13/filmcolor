@@ -672,6 +672,46 @@ export function App() {
                 }}
               />
             </div>
+            <div className="toneSlider">
+              <label>
+                Density
+                <span>{(selectedFrame?.pipeline.tone.density ?? 0.05).toFixed(2)}</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="0.3"
+                step="0.01"
+                value={selectedFrame?.pipeline.tone.density ?? 0.05}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (!selectedFrame) return;
+                  const updated = { ...selectedFrame, pipeline: { ...selectedFrame.pipeline, tone: { ...selectedFrame.pipeline.tone, density: val } } };
+                  setFrames((current) => current.map((f) => (f.frame_id === updated.frame_id ? updated : f)));
+                  updateTone({ density: val });
+                }}
+              />
+            </div>
+            <div className="toneSlider">
+              <label>
+                Grade
+                <span>{(selectedFrame?.pipeline.tone.grade ?? 0.0).toFixed(2)}</span>
+              </label>
+              <input
+                type="range"
+                min="-0.3"
+                max="0.3"
+                step="0.01"
+                value={selectedFrame?.pipeline.tone.grade ?? 0.0}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (!selectedFrame) return;
+                  const updated = { ...selectedFrame, pipeline: { ...selectedFrame.pipeline, tone: { ...selectedFrame.pipeline.tone, grade: val } } };
+                  setFrames((current) => current.map((f) => (f.frame_id === updated.frame_id ? updated : f)));
+                  updateTone({ grade: val });
+                }}
+              />
+            </div>
             </>
           )}
         </div>
