@@ -1,4 +1,4 @@
-import { Aperture, Grid2X2, ImageIcon, Play, SlidersHorizontal } from "lucide-react";
+import { Aperture, Download, Grid2X2, ImageIcon, Play, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getEngines, importRoll, listFrames, listRolls, renderPreview, setFrameEngine, setFrameStyle, syncFrames } from "./api";
 import type { EngineStatus, FrameSidecar, OutputStyle, ProcessingEngine, RollMetadata, SampleType, SyncRequest } from "./types";
@@ -21,10 +21,22 @@ export function App() {
   const prevSamplesRef = useRef<string>("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [frameDiagnostics, setFrameDiagnostics] = useState<Record<string, Record<string, unknown>>>({});
-  const [showImport, setShowImport] = useState(false);
-  const [importPath, setImportPath] = useState("");
-  const [importName, setImportName] = useState("");
   const [importing, setImporting] = useState(false);
+  const [renamingId, setRenamingId] = useState<string>("");
+  const [renameValue, setRenameValue] = useState("");
+
+  async function handleRename(rollId: string) {
+    if (!renameValue.trim()) { setRenamingId(""); return; }
+    try {
+      const resp = await fetch(`/api/rolls/${rollId}?name=${encodeURIComponent(renameValue.trim())}`, { method: "PATCH" });
+      if (!resp.ok) throw new Error(await resp.text());
+      const updated = await resp.json();
+      setRolls((current) => current.map((r) => (r.id === rollId ? updated : r)));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Rename failed");
+    }
+    setRenamingId("");
+  }
   const [syncMessage, setSyncMessage] = useState<string>("");
   const [previewedFrames, setPreviewedFrames] = useState<Set<string>>(new Set());
   function toggleSection(name: string) {
@@ -163,22 +175,38 @@ export function App() {
     }
   }
 
-  async function handleImport() {
-    if (!importPath.trim() || !importName.trim()) return;
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImportFolder() {
+    folderInputRef.current?.click();
+  }
+
+  async function handleFilesPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const firstPath = (files[0] as any).webkitRelativePath || files[0].name;
+    const folderName = firstPath.split(/[/\\]/)[0] || "imported";
     setImporting(true);
     try {
-      await importRoll(importPath.trim(), importName.trim());
+      const formData = new FormData();
+      formData.append("name", folderName);
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+      const resp = await fetch("/api/rolls/import-upload?name=" + encodeURIComponent(folderName), {
+        method: "POST",
+        body: formData,
+      });
+      if (!resp.ok) throw new Error(await resp.text());
       const items = await listRolls();
       setRolls(items);
       setSelectedRollId(items[items.length - 1]?.id ?? "");
-      setShowImport(false);
-      setImportPath("");
-      setImportName("");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Import failed");
     } finally {
       setImporting(false);
     }
+    e.target.value = "";
   }
 
   const toneTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -271,46 +299,50 @@ export function App() {
           <h1>Filmcolor</h1>
         </div>
         <div className="sectionLabel">ROLL</div>
-        {showImport ? (
-          <div className="importForm">
-            <input
-              type="text"
-              placeholder="Folder path (e.g. D:/scans/roll-001)"
-              value={importPath}
-              onChange={(e) => setImportPath(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Roll name"
-              value={importName}
-              onChange={(e) => setImportName(e.target.value)}
-            />
-            <div className="importActions">
-              <button onClick={handleImport} disabled={importing} className="importBtn" style={{ fontSize: "12px" }}>
-                {importing ? "Importing..." : "Import"}
-              </button>
-              <button onClick={() => setShowImport(false)} className="cancelBtn">
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setShowImport(true)} className="importBtn" style={{ marginBottom: "12px" }}>
-            + Import Roll
-          </button>
-        )}
+        <input
+          ref={folderInputRef}
+          type="file"
+          // @ts-ignore webkitdirectory is supported in Chrome
+          webkitdirectory=""
+          directory=""
+          multiple
+          style={{ display: "none" }}
+          onChange={handleFilesPicked}
+        />
+        <button onClick={handleImportFolder} disabled={importing} className="importBtn" style={{ marginBottom: "12px" }}>
+          {importing ? "Importing..." : "+ Import Roll"}
+        </button>
         {rolls.length === 0 ? (
           <div className="empty">No rolls imported</div>
         ) : (
           rolls.map((roll) => (
-            <button
-              className={roll.id === selectedRollId ? "roll active" : "roll"}
-              key={roll.id}
-              onClick={() => setSelectedRollId(roll.id)}
-            >
-              <span>{roll.name}</span>
-              <small>{roll.id}</small>
-            </button>
+            <div key={roll.id}>
+              {renamingId === roll.id ? (
+                <div className="importForm" style={{ marginBottom: 4 }}>
+                  <input
+                    type="text"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleRename(roll.id); if (e.key === "Escape") setRenamingId(""); }}
+                    autoFocus
+                  />
+                  <div className="importActions">
+                    <button onClick={() => handleRename(roll.id)} className="importBtn" style={{ fontSize: "11px" }}>Save</button>
+                    <button onClick={() => setRenamingId("")} className="cancelBtn">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className={roll.id === selectedRollId ? "roll active" : "roll"}
+                  onClick={() => setSelectedRollId(roll.id)}
+                  onDoubleClick={() => { setRenamingId(roll.id); setRenameValue(roll.name); }}
+                  title="Double-click to rename"
+                >
+                  <span>{roll.name}</span>
+                  <small>{roll.id}</small>
+                </button>
+              )}
+            </div>
           ))
         )}
       </aside>
@@ -321,9 +353,26 @@ export function App() {
             <div className="sectionLabel">FRAME</div>
             <strong>{selectedFrame?.frame_id ?? "No frame selected"}</strong>
           </div>
-          <button className="iconButton" onClick={handleRenderPreview} aria-label="Render preview">
-            <Play size={18} />
-          </button>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button className="iconButton" onClick={handleRenderPreview} disabled={isRendering} aria-label="Render preview">
+              <Play size={18} />
+            </button>
+            <button
+              className="iconButton"
+              disabled={!previewUrl}
+              onClick={() => {
+                if (!selectedRollId || !selectedFrame) return;
+                const a = document.createElement("a");
+                a.href = `/api/rolls/${selectedRollId}/frames/${selectedFrame.frame_id}/export?format=tiff`;
+                a.download = `${selectedFrame.frame_id}.tiff`;
+                a.click();
+              }}
+              aria-label="Export TIFF"
+              title="Export TIFF"
+            >
+              <Download size={18} />
+            </button>
+          </div>
         </header>
 
         <div className="previewWrap" onClick={handlePreviewClick}>

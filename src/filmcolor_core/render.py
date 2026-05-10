@@ -15,10 +15,10 @@ def render_preview_file(
     source_path: Path,
     output_path: Path,
     settings: PipelineSettings,
-    max_size: int = 1600,
+    max_size: int | None = 1600,
 ) -> dict[str, Any]:
     if settings.engine == ProcessingEngine.NEGPY:
-        return render_negpy_preview(source_path, output_path, settings, max_size=max_size)
+        return render_negpy_preview(source_path, output_path, settings, max_size=max_size or 1600)
 
     decoded = decode_to_linear_rgb(source_path)
     rendered, diagnostics = render_pipeline_array(decoded.data, settings, max_size=max_size)

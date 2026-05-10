@@ -4,9 +4,14 @@ import copy
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+import shutil
+import tempfile
+
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+from filmcolor_core.sidecar import write_roll_metadata
 
 from filmcolor_core.models import FrameSidecar, FrameStatus
 from filmcolor_core.negpy_adapter import get_negpy_status
@@ -68,7 +73,27 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.post("/api/rolls/import-upload")
+    async def import_upload(name: str, files: list[UploadFile]):
+        upload_root = workspace.root / "uploads" / name
+        upload_root.mkdir(parents=True, exist_ok=True)
+        for file in files:
+            dest = upload_root / (file.filename or "unknown")
+            with dest.open("wb") as f:
+                while chunk := await file.read(1024 * 1024):
+                    f.write(chunk)
+        return workspace.import_roll(upload_root, name)
+
     @app.get("/api/rolls")
+    def list_rolls():
+        return workspace.list_rolls()
+
+    @app.patch("/api/rolls/{roll_id}")
+    def rename_roll(roll_id: str, name: str = ""):
+        roll = workspace.get_roll(roll_id)
+        updated = roll.model_copy(update={"name": name})
+        write_roll_metadata(workspace._roll_dir(roll_id) / "roll.json", updated)
+        return updated
     def list_rolls():
         return workspace.list_rolls()
 
@@ -171,6 +196,21 @@ def create_app(workspace_root: Path | None = None) -> FastAPI:
         if not path.exists():
             raise HTTPException(status_code=404, detail="Preview has not been rendered")
         return FileResponse(path)
+
+    @app.post("/api/rolls/{roll_id}/frames/{frame_id}/export")
+    def export_frame(roll_id: str, frame_id: str, format: str = "tiff"):
+        frame = workspace.get_frame(roll_id, frame_id)
+        export_dir = workspace._roll_dir(roll_id) / "exports" / format
+        export_dir.mkdir(parents=True, exist_ok=True)
+        output_path = export_dir / f"{frame_id}.{format}"
+        render_preview_file(
+            Path(frame.source.path),
+            output_path,
+            frame.pipeline,
+            max_size=None,
+        )
+        media = "image/tiff" if format == "tiff" else "image/jpeg"
+        return FileResponse(output_path, media_type=media, filename=f"{frame_id}.{format}")
 
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str):

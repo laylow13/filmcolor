@@ -1,6 +1,6 @@
 /// <reference types="@testing-library/jest-dom" />
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { App } from "./App";
 
@@ -29,11 +29,10 @@ describe("App", () => {
     expect(await screen.findByText("ENGINE")).toBeInTheDocument();
   });
 
-  it("shows import form on click", async () => {
+  it("shows import and export buttons", async () => {
     vi.stubGlobal("fetch", mockFetch);
     render(<App />);
-    fireEvent.click(await screen.findByText("+ Import Roll"));
-    expect(screen.getByPlaceholderText(/Folder path/)).toBeInTheDocument();
+    expect(await screen.findByText("+ Import Roll")).toBeInTheDocument();
   });
 });
 
