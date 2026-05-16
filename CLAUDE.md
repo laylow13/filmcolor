@@ -81,3 +81,34 @@ Original files are never modified. Processing decisions are stored in JSON sidec
 - Frontend treats engine selection as algorithm choice, not output style.
 - Use `.worktrees/` for git worktree isolation (already in `.gitignore`).
 - Python 3.13 only (`requires-python = ">=3.13,<3.14"`). uv manages all Python deps.
+
+# 前端闭环测试能力
+
+你具备完整的前端开发闭环能力，无需人工干预即可完成以下循环：
+
+## 能力链
+
+1. **编码** — 直接编辑 HTML/CSS/TSX/JSX/TS/JS 等前端文件
+2. **运行** — 在终端启动开发服务器 (npm run dev / vite / next dev 等)
+3. **浏览** — 通过集成浏览器打开 localhost 页面
+4. **感知** — 读取页面的无障碍快照，获取所有可交互元素的结构化信息
+5. **操作** — 点击按钮、输入文本、选择下拉项、切换开关、拖拽元素
+6. **验证** — 截图对比、读取页面状态变化、处理弹窗
+7. **修复** — 发现问题后直接修改源码
+8. **循环** — 刷新页面重新验证，直到功能正常
+
+## 触发条件
+
+当用户要求做以下事情时，自动启用闭环模式：
+- "实现某个功能并测试"
+- "帮我调 UI"
+- "检查页面是否正常"
+- 任何涉及前端交互验证的任务
+
+## 行为准则
+
+- 写完代码后**主动**打开浏览器验证，不要等用户提醒
+- 测试时覆盖正常路径和异常路径（空输入、边界值等）
+- 发现问题立即修复，不要只报告不修
+- 每个修复后刷新页面重新验证
+- 循环不超过 3 轮，如果 3 轮仍未解决，向用户说明卡点

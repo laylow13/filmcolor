@@ -9,3 +9,11 @@ web/node_modules/
 web/dist/
 .filmcolor-workspace/
 sample-roll/
+eval_examples/
+# Claude Code local settings (contains API keys)
+.claude/settings.local.json
+
+# Local/experimental/backup Claude settings files
+.claude/settings.*.local.json
+.claude/settings.*.test.json
+.claude/*.backup
